@@ -21,14 +21,8 @@ from kazoo.handlers.gevent import SequentialGeventHandler
 import pika
 
 # Finally, import the stdlib.
-import re, socket, argparse, sys, logging, time
+import re, socket, argparse, sys, logging, time, uuid, json
 from functools import wraps, partial
-
-logging.basicConfig(
-   format = "%(asctime)-15s [%(levelname)-8s] %(message)s",
-   level=logging.INFO
-)
-logging.getLogger().setLevel(logging.INFO)
 
 def forever(func):
    """
@@ -110,6 +104,89 @@ def _lookup_ip_address():
    finally:
       connection.close()
 
+class AMQPLoggingHandler(logging.Handler):
+   """
+   A Python logging handler to send logging results to AMQP for distribution
+   and archival.
+   """
+   
+   def __init__(self, amqp_channel, exchange_name):
+      super(AMQPLoggingHandler, self).__init__()
+      
+      # Set up local state.
+      self.amqp_channel = amqp_channel
+      self.exchange = exchange_name
+      self.disable = False
+      self.task_id = None
+      self.my_uuid = str(uuid.uuid4())
+      self.setFormatter(logging.Formatter(
+         "%(asctime)s [%(levelname)-8s] %(message)s"
+      ))
+      
+      # Initialize the AMQP exchange.
+      self.amqp_channel.exchange_declare(exchange=exchange_name, type="topic")
+   
+   def emit_amqp(self, message):
+      """
+      Emit a message to this stream's STDERR.
+      """
+      
+      # Publish this message over AMQP.
+      self.amqp_channel.basic_publish(
+         exchange = self.exchange,
+         routing_key = "stderr.{0}".format(self.task_id),
+         
+         # Pack the current worker and task IDs into the message.
+         body = json.dumps(message)
+      )
+   
+   def emit_close(self):
+      """
+      Closes the other end of this pipe.
+      """
+      
+      print "Emitting a close event!"
+      
+      self.emit_amqp(dict(type = 'close'))
+   
+   def emit_unformatted(self, message, level = None):
+      """
+      Emit an unformatted (string) logging message to AMQP.
+      """
+      
+      # Bounce most logs to syslog.
+      sys.stderr.write("{0}\n".format(message))
+      sys.stderr.flush()
+      
+      # Ensure that generic messages are shown to the user.
+      if level is None:
+         level = logging.WARN
+      
+      # Ensure that we don't create log loops.
+      if self.disable: return
+      self.disable = True
+      
+      try:
+         self.emit_amqp(dict(
+            type = 'data',
+            worker_uuid = self.my_uuid,
+            task_id = self.task_id,
+            message = message,
+            level = level
+         ))
+         
+      except pika.exceptions.ChannelClosed:
+         print "Channel closed!"
+      
+      self.disable = False
+   
+   def emit(self, record):
+      """
+      Emits a logging message to AMQP.
+      """
+      
+      return self.emit_unformatted(self.format(record), level = record.levelno)
+
 class ZooKeeperAgent(object):
    """
    This class records any daemon that relies on a ZooKeeper connection
@@ -183,13 +260,14 @@ class EngineOrControllerRunner(ZooKeeperAgent):
    controller or IPython engine task.
    """
    
-   def __init__(self, zookeeper, amqp_channel, queue_name):
+   def __init__(self, zookeeper, amqp_channel, queue_name, logs_handler):
       # Initialize the connection to ZooKeeper.
       super(EngineOrControllerRunner, self).__init__(zookeeper)
       
       # Save local state.
       self.amqp_channel = amqp_channel
       self.queue_name = queue_name
+      self.logs_handler = logs_handler
    
    @forever
    def _on_connected_to_zookeeper(self):
@@ -207,7 +285,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       # Mask on an empty queue.
       if method_frame:
          # Parse the incoming message.
-         kind, task_id = body.split(':', 1)
+         kind, task_id, head_sha1 = body.split(':', 2)
          
          with Interruptable("AMQP Task available") as task_available:
             
@@ -219,19 +297,31 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                logging.info('Processing task_id={0!r}, kind={1!r}'.
                  format(task_id, kind))
                
-               with Interruptable("Processing AMQP task") as still_working:
+               # Associate logs with this task.
+               self.logs_handler.task_id = task_id
+               
+               try:
+                  with Interruptable("Processing AMQP task") as still_working:
+                     
+                     # Launch the correct type of worker.
+                     if kind == 'engine':
+                        self._has_engine_task_to_perform(task_id)
+                     
+                     elif kind == 'controller':
+                        self._has_controller_task_to_perform(
+                          task_id, still_working.interrupt)
+                     
+                     else:
+                        logging.warn("Received task of unknown type {0!r}"
+                                        .format(kind))
                   
-                  # Launch the correct type of worker.
-                  if kind == 'engine':
-                     self._has_engine_task_to_perform(task_id)
-                  
-                  elif kind == 'controller':
-                     self._has_controller_task_to_perform(
-                       task_id, still_working.interrupt)
-                  
-                  else:
-                     logging.warn("Received task of unknown type {0!r}"
-                                     .format(kind))
+               finally:
+                  # Emitting a closing handler.
+                  if kind == 'controller':
+                     self.logs_handler.emit_close()
+
+                  # Clean up logging.
+                  self.logs_handler.task_id = None
                
                # Log completion.
                logging.info('Completed task_id={0!r}'.format(task_id))
@@ -295,16 +385,33 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       controller is active.
       """
       
-      gevent.sleep(1)
-        # Rate limit launches to the controller.
-      
+      # Launch the IPython engine.
       engine = subprocess.Popen(
-        ["ipengine", "--url={0}".format(controller_url)])
-          # Launch the IPython engine.
+        ["ipengine", "--url={0}".format(controller_url)],
+        
+        stderr = subprocess.STDOUT,
+        stdout = subprocess.PIPE
+      )
       
       try:
+         # Asynchronously log data from stdout/stderr.
+         @gevent.spawn
+         def task():
+            while True:
+               line = engine.stdout.readline()
+               if not line: return
+               self.logs_handler.emit_unformatted(line[:-1],
+                 level = logging.INFO)
+         
+         # Wait for the engine to complete.
          engine.wait()
-           # TODO(fatlotus): improve error reporting here :S
+         
+         # Report engine shutdown.
+         if engine.returncode != 0:
+            logging.error('Subprocess failed with status={0}'
+                             .format(engine.returncode))
+         else:
+            logging.info('Subprocess exited cleanly')
       finally:
          engine.terminate()
    
@@ -314,7 +421,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       This function manages the IPython controller subprocess.
       """
       
-      logging.info("Connected to ZooKeeper!")
+      # Rate limit controller launches to avoid hammering Git.
+      gevent.sleep(1)
       
       # Start the local IPython controller.
       ip_address = _lookup_ip_address()
@@ -337,14 +445,39 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             self.zookeeper.create('/{0}'.format(task_id), ephemeral = True,
                value = controller_url)
          except NodeExistsError:
-            raise TaskComplete
+            logging.warn('Potential race condition in task_id or done/task_id.')
+            finish_job()
               # Generally this is a sign of a bad task -- but dragons remain.
          
          try:
+            # Checking out the proper source code.
+            subprocess.call("""
+                rm -rf /worker/code && git clone \
+                  http://10.185.186.151:1337/assignment-one.git \
+                  /worker/code
+              """,
+              shell = True)
+            
             # Trigger main IPython job.
-            main_job = subprocess.Popen([ "python", "program.py" ])
+            main_job = subprocess.Popen(
+              [ "python", "program.py" ],
+              
+              cwd = "/worker/code",
+              stdout = subprocess.PIPE,
+              stderr = subprocess.STDOUT
+            )
+            
+            # Asynchronously log data from stdout/stderr.
+            @gevent.spawn
+            def task():
+               while True:
+                  line = main_job.stdout.readline()
+                  if not line: return
+                  self.logs_handler.emit_unformatted(line[:-1])
+            
             main_job.wait()
             
+            # Ensure that the controller finishes after the main job.
             try:
                controller_job.terminate()
             except OSError:
@@ -369,6 +502,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             pass
 
 def main():
+   # Configure logging
+   # logging.basicConfig(
+   #    format = "%(asctime)-15s [%(levelname)-8s] %(message)s",
+   #    level=logging.INFO
+   # )
+
    # Set up the argument parser.
    parser = argparse.ArgumentParser(description='Run an LSDA worker node.')
    parser.add_argument('--zookeeper', action = 'append', required=True)
@@ -390,11 +529,17 @@ def main():
    connection = pika.BlockingConnection(parameters)
    channel = connection.channel()
    
+   # Configure logging.
+   handler = AMQPLoggingHandler(channel, 'lsda_logs')
+   
+   logging.getLogger().addHandler(handler)
+   logging.getLogger().setLevel(logging.INFO)
+   
    # Ensure that the queue we will pull from exists.
    channel.queue_declare('lsda_tasks', durable=True)
    
    # Begin processing requests.
-   EngineOrControllerRunner(zookeeper, channel, 'lsda_tasks').join()
+   EngineOrControllerRunner(zookeeper, channel, 'lsda_tasks', handler).join()
 
 if __name__ == "__main__":
    sys.exit(main())
