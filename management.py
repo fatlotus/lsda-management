@@ -1,21 +1,34 @@
 #!/usr/bin/env python
+#
+# Author: Jeremy Archer <jarcher@uchicago.edu>
+# Date: 10 December 2013
+# 
 
+
+# Import the Python green threading library.
 from gevent import monkey; monkey.patch_all()
 from gevent.event import Event
 from gevent import subprocess
 import greenlet, gevent
 
+# Import the pure-Python ZooKeeper implementation.
 from kazoo.client import KazooClient
 from kazoo.protocol.states import KazooState
 from kazoo.exceptions import NoNodeError, NodeExistsError
 from kazoo.handlers.gevent import SequentialGeventHandler
 
+# Import the pure-Python AMQP client libraries.
 import pika
 
+# Finally, import the stdlib.
 import re, socket, argparse, sys, logging, time
 from functools import wraps, partial
 
-# logging.getLogger().setLevel(logging.INFO)
+logging.basicConfig(
+   format = "%(asctime)-15s [%(levelname)-8s] %(message)s",
+   level=logging.INFO
+)
+logging.getLogger().setLevel(logging.INFO)
 
 def forever(func):
    """
@@ -41,14 +54,17 @@ def forever(func):
    return inner
 
 class DeepBreakException(Exception):
-   pass
+   """
+   An exception to allows breaking out of multiply-nested code.
+   """
 
 class Interruptable(object):
    """
-   Allows breaking out of a deeply-nested block of code.
+   This context manager allows a user to break out of code by calling the given
+   function.
    """
    
-   def __init__(self, description):
+   def __init__(self, description=None):
       self.exception = DeepBreakException()
       self.active = True
       self.thread = gevent.getcurrent()
@@ -56,32 +72,29 @@ class Interruptable(object):
    
    def __enter__(self):
       self.active = True
+      logging.info("Enter state={0!r}".format(self.description))
       return self
    
    def __exit__(self, kind, instance, traceback):
       self.active = False
+      logging.info("Exit state={0!r}".format(self.description))
       return instance is self.exception
    
    def interrupt(self, *vargs, **dargs):
+      """
+      Jumps to the end of this block.
+      """
+      
       if self.active:
          self.thread.kill(self.exception)
 
 def wait_forever():
    """
-   This function never returns.
+   Waits indefinitely.
    """
    
    while True:
       gevent.sleep(60)
-
-def once(object, func):
-   """
-   Adds the given function as a one-time listener to the given object.
-   """
-   def inner(*vargs, **dargs):
-      if func(*vargs, **dargs):
-         object.remove_listener(func)
-   object.add_listener(inner)
 
 def _lookup_ip_address():
    """
@@ -96,30 +109,6 @@ def _lookup_ip_address():
       return connection.getsockname()[0]
    finally:
       connection.close()
-
-class ApplicationInterrupt(Exception):
-   """
-   This exception or any subclass should only be used for internal exceptions,
-   hence the moniker -Interrupt.
-   """
-
-class DisconnectedFromZooKeeper(ApplicationInterrupt):
-   """
-   This exception is triggered when we have suddenly lost our connection
-   to ZooKeeper.
-   """
-
-class LostController(ApplicationInterrupt):
-   """
-   This exception is triggered when the controller instance has suddenly
-   disconnected from ZooKeeper.
-   """
-
-class TaskComplete(ApplicationInterrupt):
-   """
-   This exception is triggered when the application has finished processing
-   a work item.
-   """
 
 class ZooKeeperAgent(object):
    """
@@ -144,18 +133,35 @@ class ZooKeeperAgent(object):
       method meant to be overriden.
       """
       
-      if self.zookeeper.state != 'CONNECTED':
-         with Interruptable("Disconnected") as disconnected:
-            once(self.zookeeper, lambda x: gevent.spawn(disconnected.interrupt)
-                                   if x == 'CONNECTED' else True)
+      # This function triggers the given action when the connection is in the
+      # specified states.
+      def trigger_on_states(action, states):
          
-            wait_forever()
+         # Wait until the state changes.
+         def inner(state):
+            if state in states:
+               gevent.spawn(action)
+               self.zookeeper.remove_listener(inner)
+         
+         # Actually hook into the ZooKeeper connection.
+         self.zookeeper.add_listener(inner)
       
-      with Interruptable("Connected") as connected:
-         once(self.zookeeper, lambda x: gevent.spawn(connected.interrupt)
-                                if x != 'CONNECTED' else True)
+      # Skip ahead if we're already connected.
+      if self.zookeeper.state != 'CONNECTED':
+         
+         with Interruptable("Disconnected from ZooKeeper") as disconnected:
+            trigger_on_states(disconnected.interrupt, ( 'CONNECTED' ))
+               # Wake up when we are connected.
+            
+            wait_forever()
+               # Block until this occurs.
+      
+      with Interruptable("Connected to ZooKeeper") as connected:
+         trigger_on_states(connected.interrupt, ( 'SUSPENDED', 'LOST' ))
+            # Wake up If we reach the given state.
          
          self._on_connected_to_zookeeper()
+            # Process events until this occurs.
    
    def _on_connected_to_zookeeper(self):
       """
@@ -167,6 +173,8 @@ class ZooKeeperAgent(object):
       Block until this daemon has completed.
       """
       
+      # Wait until this thread completes or raise the exception it terminated
+      # with.
       self.thread.get()
 
 class EngineOrControllerRunner(ZooKeeperAgent):
@@ -192,8 +200,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       # Ensure that we don't busy wait.
       gevent.sleep(1)
       
-      logging.info('Waiting for next AMQP event...')
-      
       # Consume the next event.
       method_frame, header_frame, body = (
         self.amqp_channel.basic_get(self.queue_name))
@@ -203,7 +209,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          # Parse the incoming message.
          kind, task_id = body.split(':', 1)
          
-         with Interruptable("Task available") as task_available:
+         with Interruptable("AMQP Task available") as task_available:
             
             # Ensure that this task has not already finished.
             if not self.zookeeper.exists('/done/{0}'.format(task_id),
@@ -213,16 +219,19 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                logging.info('Processing task_id={0!r}, kind={1!r}'.
                  format(task_id, kind))
                
-               with Interruptable("Still working") as still_working:
+               with Interruptable("Processing AMQP task") as still_working:
                   
                   # Launch the correct type of worker.
                   if kind == 'engine':
-                     self._has_engine_task_to_perform(
-                       task_id)
+                     self._has_engine_task_to_perform(task_id)
                   
                   elif kind == 'controller':
                      self._has_controller_task_to_perform(
                        task_id, still_working.interrupt)
+                  
+                  else:
+                     logging.warn("Received task of unknown type {0!r}"
+                                     .format(kind))
                
                # Log completion.
                logging.info('Completed task_id={0!r}'.format(task_id))
@@ -231,6 +240,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                # updates should occur.
                self.zookeeper.create('/done/{0}'.format(task_id),
                  makepath = True)
+            
+            else:
+               logging.warn("Removed task {0!r} that has already been run."
+                              .format(task_id))
          
          # ACK the AMQP task. Since we're trusting ZooKeeper for once-
          # only delivery, we can afford to let this fall off the stack
@@ -257,12 +270,14 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             
          except NoNodeError:
             has_controller.interrupt()
+              # If we couldn't find the controller, skip ahead.
          
          self._has_controller(controller_url)
            # Trigger the next level of processing.
       
       with Interruptable("No controller ready") as no_controller:
          
+         # Ensure that we only wake up when ready.
          def inner(exists):
             if exists:
                no_controller.interrupt()
@@ -285,6 +300,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       
       engine = subprocess.Popen(
         ["ipengine", "--url={0}".format(controller_url)])
+          # Launch the IPython engine.
       
       try:
          engine.wait()
@@ -353,25 +369,31 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             pass
 
 def main():
+   # Set up the argument parser.
    parser = argparse.ArgumentParser(description='Run an LSDA worker node.')
    parser.add_argument('--zookeeper', action = 'append', required=True)
    parser.add_argument('--amqp', required=True)
    
    options = parser.parse_args()
    
+   # Connect to ZooKeeper.
    zookeeper = KazooClient(
      hosts = ','.join(options.zookeeper),
      handler = SequentialGeventHandler()
    )
+   
    zookeeper.start_async()
    
+   # Connect to AMQP.
    parameters = pika.ConnectionParameters(options.amqp)
    
    connection = pika.BlockingConnection(parameters)
    channel = connection.channel()
    
+   # Ensure that the queue we will pull from exists.
    channel.queue_declare('lsda_tasks', durable=True)
    
+   # Begin processing requests.
    EngineOrControllerRunner(zookeeper, channel, 'lsda_tasks').join()
 
 if __name__ == "__main__":
