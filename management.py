@@ -454,10 +454,14 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             code_direcory = tempfile.mkdtemp()
             
             try:
+               # Construct reference to the current code repository.
+               git_url = (
+                  "http://gitolite-internal.lsda.cs.uchicago.edu:1337/" +
+                  "assignment-one.git"
+               )
+               
                # Checking out the proper source code.
-               subprocess.call(["/usr/bin/git", "clone",
-                     "http://10.185.186.151:1337/assignment-one.git",
-                     code_direcory])
+               subprocess.call(["/usr/bin/git", "clone", git_url, code_direcory])
                
                # Trigger main IPython job.
                main_job = subprocess.Popen(
