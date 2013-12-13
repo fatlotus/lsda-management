@@ -21,7 +21,7 @@ from kazoo.handlers.gevent import SequentialGeventHandler
 import pika
 
 # Finally, import the stdlib.
-import re, socket, argparse, sys, logging, time, uuid, json
+import re, socket, argparse, sys, logging, time, uuid, json, shutil
 from functools import wraps, partial
 
 def forever(func):
@@ -450,39 +450,44 @@ class EngineOrControllerRunner(ZooKeeperAgent):
               # Generally this is a sign of a bad task -- but dragons remain.
          
          try:
-            # Checking out the proper source code.
-            subprocess.call("""
-                rm -rf /worker/code && git clone \
-                  http://10.185.186.151:1337/assignment-one.git \
-                  /worker/code
-              """,
-              shell = True)
+            # Create a working directory for this project.
+            code_direcory = tempfile.mkdtemp()
             
-            # Trigger main IPython job.
-            main_job = subprocess.Popen(
-              [ "python", "program.py" ],
-              
-              cwd = "/worker/code",
-              stdout = subprocess.PIPE,
-              stderr = subprocess.STDOUT
-            )
-            
-            # Asynchronously log data from stdout/stderr.
-            @gevent.spawn
-            def task():
-               while True:
-                  line = main_job.stdout.readline()
-                  if not line: return
-                  self.logs_handler.emit_unformatted(line[:-1])
-            
-            main_job.wait()
-            
-            # Ensure that the controller finishes after the main job.
             try:
-               controller_job.terminate()
-            except OSError:
-               pass
-            controller_job.wait()
+               # Checking out the proper source code.
+               subprocess.call(["/usr/bin/git", "clone",
+                     "http://10.185.186.151:1337/assignment-one.git",
+                     code_direcory])
+               
+               # Trigger main IPython job.
+               main_job = subprocess.Popen(
+                 [ "/usr/bin/python", "program.py" ],
+                 
+                 cwd = code_directory,
+                 stdout = subprocess.PIPE,
+                 stderr = subprocess.STDOUT
+               )
+               
+               # Asynchronously log data from stdout/stderr.
+               @gevent.spawn
+               def task():
+                  while True:
+                     line = main_job.stdout.readline()
+                     if not line: return
+                     self.logs_handler.emit_unformatted(line[:-1])
+               
+               main_job.wait()
+               
+               # Ensure that the controller finishes after the main job.
+               try:
+                  controller_job.terminate()
+               except OSError:
+                  pass
+               controller_job.wait()
+               
+            finally:
+               # Clean up old directory trees.
+               shutil.rmtree(code_directory)
             
             # Mark this controller as complete, which will deallocate the task
             # and expire the workers.
