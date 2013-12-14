@@ -421,7 +421,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          else:
             logging.info('Subprocess exited cleanly')
       finally:
-         engine.terminate()
+         try:
+            engine.terminate()
+         except OSError:
+            pass
    
    @forever
    def _has_controller_task_to_perform(self, task_id, finish_job, commit):
