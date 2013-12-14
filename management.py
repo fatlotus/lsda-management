@@ -408,6 +408,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          
          # Wait for the engine to complete.
          engine.wait()
+         task.join()
          
          # Report engine shutdown.
          if engine.returncode != 0:
@@ -489,6 +490,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                      self.logs_handler.emit_unformatted(line[:-1])
                
                main_job.wait()
+               task.join()
                
                # Ensure that the controller finishes after the main job.
                try:
