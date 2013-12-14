@@ -556,7 +556,7 @@ def main():
    logging.getLogger().setLevel(logging.INFO)
    
    # Ensure that the queue we will pull from exists.
-   channel.queue_declare('lsda_tasks', durable=True)
+   jobs_channel.queue_declare('lsda_tasks', durable=True)
    
    # Begin processing requests.
    EngineOrControllerRunner(zookeeper, jobs_channel,
