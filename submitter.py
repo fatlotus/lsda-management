@@ -29,7 +29,7 @@ for branch in branches_to_run:
       
       # Read the SHA-1 hash of each given commit.
       commit = subprocess.check_output([ '/usr/bin/git', 'rev-parse', branch ])
-      commits_to_run.append(commit)
+      commits_to_run.append(commit.strip())
 
 # Submit each commit serially.
 for commit in commits_to_run:
