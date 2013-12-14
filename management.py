@@ -312,7 +312,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                      
                      elif kind == 'controller':
                         self._has_controller_task_to_perform(
-                          task_id, still_working.interrupt)
+                          task_id, still_working.interrupt, head_sha1)
                      
                      else:
                         logging.warn("Received task of unknown type {0!r}"
@@ -419,7 +419,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          engine.terminate()
    
    @forever
-   def _has_controller_task_to_perform(self, task_id, finish_job):
+   def _has_controller_task_to_perform(self, task_id, finish_job, commit):
       """
       This function manages the IPython controller subprocess.
       """
@@ -466,6 +466,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                # Checking out the proper source code.
                subprocess.call(["/usr/bin/git", "clone", "--quiet",
                  git_url, code_directory])
+               
+               # Checking out the proper source code.
+               subprocess.call(["/usr/bin/git", "checkout", commit],
+                 cwd = code_directory)
                
                # Trigger main IPython job.
                main_job = subprocess.Popen(
