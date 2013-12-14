@@ -1,11 +1,12 @@
 #!/usr/bin/env python
+#
+# Author: Jeremy Archer <jarcher@uchicago.edu>
+# Date: 14 December 2013
+#
 
-import pika
-import uuid
-import json
-import sys
-import logging
+import pika, uuid, subprocess, json, sys, logging
 
+# Kinda janky, but it allows us to break out of the existing event loop.
 class DoneException(Exception):
    pass
 
@@ -24,11 +25,11 @@ commits_to_run = [ ]
 for branch in branches_to_run:
    
    # Ensure that only submission branches are pushed.
-   if branch.startswith('submissions/'):
+   if branch.startswith('refs/heads/submissions/'):
       
       # Read the SHA-1 hash of each given commit.
       commit = subprocess.check_output([ '/usr/bin/git', 'rev-parse', branch ])
-      commits_to_run.push(commit)
+      commits_to_run.append(commit)
 
 # Submit each commit serially.
 for commit in commits_to_run:
