@@ -10,6 +10,9 @@ import pika, uuid, subprocess, json, sys, logging, base64
 class DoneException(Exception):
    pass
 
+# Ensure that these branches can be fetched over HTTP.
+subprocess.check_call(['git', 'update-server-info'])
+
 # Set up the connection to AMQP.
 connection = pika.BlockingConnection(pika.ConnectionParameters(
   'amqp.lsda.cs.uchicago.edu'))
