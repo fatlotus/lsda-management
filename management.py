@@ -21,7 +21,7 @@ from kazoo.handlers.gevent import SequentialGeventHandler
 import pika
 
 # Finally, import the stdlib.
-import re, socket, argparse, sys, logging, time, uuid, json, shutil
+import re, socket, argparse, sys, logging, time, uuid, json, shutil, tempfile
 from functools import wraps, partial
 
 def forever(func):
@@ -451,7 +451,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          
          try:
             # Create a working directory for this project.
-            code_direcory = tempfile.mkdtemp()
+            code_directory = tempfile.mkdtemp()
             
             try:
                # Construct reference to the current code repository.
