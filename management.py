@@ -8,6 +8,7 @@
 # Import the Python green threading library.
 from gevent import monkey; monkey.patch_all()
 from gevent.event import Event
+from gevent.coros import Semaphore
 from gevent import subprocess
 import greenlet, gevent
 
@@ -122,6 +123,7 @@ class AMQPLoggingHandler(logging.Handler):
       self.setFormatter(logging.Formatter(
          "%(asctime)s [%(levelname)-8s] %(message)s"
       ))
+      self.semaphore = Semaphore()
       
       # Initialize the AMQP exchange.
       self.amqp_channel.exchange_declare(exchange=exchange_name, type="topic")
@@ -131,14 +133,17 @@ class AMQPLoggingHandler(logging.Handler):
       Emit a message to this stream's STDERR.
       """
       
-      # Publish this message over AMQP.
-      self.amqp_channel.basic_publish(
-         exchange = self.exchange,
-         routing_key = "stderr.{0}".format(self.task_id),
+      # Ensure that we don't send crazy packets to AMQP.
+      with self.semaphore:
          
-         # Pack the current worker and task IDs into the message.
-         body = json.dumps(message)
-      )
+         # Publish this message over AMQP.
+         self.amqp_channel.basic_publish(
+            exchange = self.exchange,
+            routing_key = "stderr.{0}".format(self.task_id),
+         
+            # Pack the current worker and task IDs into the message.
+            body = json.dumps(message)
+         )
    
    def emit_close(self):
       """
@@ -535,10 +540,11 @@ def main():
    parameters = pika.ConnectionParameters(options.amqp)
    
    connection = pika.BlockingConnection(parameters)
-   channel = connection.channel()
+   logging_channel = connection.channel()
+   jobs_channel = connection.channel()
    
    # Configure logging.
-   handler = AMQPLoggingHandler(channel, 'lsda_logs')
+   handler = AMQPLoggingHandler(logging_channel, 'lsda_logs')
    
    logging.getLogger().addHandler(handler)
    logging.getLogger().setLevel(logging.INFO)
@@ -547,7 +553,8 @@ def main():
    channel.queue_declare('lsda_tasks', durable=True)
    
    # Begin processing requests.
-   EngineOrControllerRunner(zookeeper, channel, 'lsda_tasks', handler).join()
+   EngineOrControllerRunner(zookeeper, jobs_channel,
+                            'lsda_tasks', handler).join()
 
 if __name__ == "__main__":
    sys.exit(main())
