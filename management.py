@@ -145,8 +145,6 @@ class AMQPLoggingHandler(logging.Handler):
       Closes the other end of this pipe.
       """
       
-      print "Emitting a close event!"
-      
       self.emit_amqp(dict(type = 'close'))
    
    def emit_unformatted(self, message, level = None):
@@ -461,7 +459,9 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                )
                
                # Checking out the proper source code.
-               subprocess.call(["/usr/bin/git", "clone", git_url, code_direcory])
+               for line in subprocess.check_output(["/usr/bin/git", "clone",
+                             git_url, code_directory]):
+                  logging.warn(line)
                
                # Trigger main IPython job.
                main_job = subprocess.Popen(
