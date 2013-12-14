@@ -23,6 +23,7 @@ import pika
 
 # Finally, import the stdlib.
 import re, socket, argparse, sys, logging, time, uuid, json, shutil, tempfile
+import base64
 from functools import wraps, partial
 
 def forever(func):
@@ -288,7 +289,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       # Mask on an empty queue.
       if method_frame:
          # Parse the incoming message.
-         kind, task_id, head_sha1 = body.split(':', 2)
+         kind, task_id, base64_commit = body.split(':', 2)
+         
+         # Decode the branch name to run.
+         branch_name = base64.b64decode(base64_commit)
          
          with Interruptable("AMQP Task available") as task_available:
             
@@ -297,8 +301,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                      partial(gevent.spawn, task_available.interrupt)):
                
                # Log the start of execution.
-               logging.info('Processing task_id={0!r}, kind={1!r}'.
-                 format(task_id, kind))
+               logging.info('Processing task={0!r}, kind={1!r}, branch={2!r}'.
+                 format(task_id, kind, branch_name))
                
                # Associate logs with this task.
                self.logs_handler.task_id = task_id
@@ -312,7 +316,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                      
                      elif kind == 'controller':
                         self._has_controller_task_to_perform(
-                          task_id, still_working.interrupt, head_sha1)
+                          task_id, still_working.interrupt, branch_name)
                      
                      else:
                         logging.warn("Received task of unknown type {0!r}"
