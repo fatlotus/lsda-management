@@ -385,7 +385,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       
       # Launch the IPython engine.
       engine = subprocess.Popen(
-        ["ipengine", "--url={0}".format(controller_url)],
+        ["/usr/local/bin/ipengine", "--url={0}".format(controller_url)],
         
         stderr = subprocess.STDOUT,
         stdout = subprocess.PIPE
@@ -424,7 +424,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       
       # Start the local IPython controller.
       ip_address = _lookup_ip_address()
-      command = [ "ipcontroller", "--ip={0}".format(ip_address)]
+      command = [ "/usr/local/bin/ipcontroller", "--ip={0}".format(ip_address)]
       controller_job = subprocess.Popen(command, stderr=subprocess.PIPE)
       
       try:
@@ -459,9 +459,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                )
                
                # Checking out the proper source code.
-               for line in subprocess.check_output(["/usr/bin/git", "clone",
-                             git_url, code_directory]):
-                  logging.warn(line)
+               subprocess.call(["/usr/bin/git", "clone", "--quiet",
+                 git_url, code_directory])
                
                # Trigger main IPython job.
                main_job = subprocess.Popen(
