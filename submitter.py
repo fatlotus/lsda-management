@@ -4,43 +4,66 @@ import json
 import sys
 import logging
 
+class DoneException(Exception):
+   pass
+
 # Set up the connection to AMQP.
 connection = pika.BlockingConnection(pika.ConnectionParameters('127.0.0.1'))
 channel = connection.channel()
 
 channel.queue_declare("lsda_tasks", durable=True)
 
-# Create the existing task to submit.
-task_id = uuid.uuid4()
-branch_sha1 = sys.argv[2] # The SHA-1 of the branch being pushed.
-jobs = ['controller', 'engine']
+# Fetch all branches pushed
+branches_to_run = sys.argv[1:]
+commits_to_run = [ ]
 
-# Publish each job in this task.
-for job in jobs:
-   channel.basic_publish(
-      exchange = '',
-      routing_key = 'lsda_tasks',
-      body = '{0}:{1}:{2}'.format(job, task_id, branch_sha1)
-   )
-
-# Prepare a STDERR pipe to respond to the queue.
-queue_name = channel.queue_declare(exclusive=True).method.queue
-
-channel.queue_bind(
-   exchange = 'lsda_logs',
-   queue = queue_name,
-   routing_key = 'stderr.{0}'.format(task_id)
-)
-
-# Handle the resulting output.
-def output(channel, method, properties, body):
-   unpacked = json.loads(body)
+# Determine which commits those branches corresponded to.
+for branch in branches_to_run:
    
-   if unpacked['type'] == 'close':
-      sys.exit(0)
-   elif unpacked['level'] >= logging.WARN:
-      print unpacked['message']
+   # Ensure that only submission branches are pushed.
+   if branch.startswith('submissions/'):
+      
+      # Read the SHA-1 hash of each given commit.
+      commit = subprocess.check_output([ '/usr/bin/git', 'rev-parse', branch ])
+      commits_to_run.push(commit)
 
-# Process output from the invocation of the script.
-channel.basic_consume(output, queue=queue_name, no_ack=True)
-channel.start_consuming()
+# Submit each commit serially.
+for commit in commits_to_run:
+   
+   # Create the existing task to submit.
+   task_id = uuid.uuid4()
+   jobs = ['controller', 'engine']
+
+   # Publish each job in this task.
+   for job in jobs:
+      channel.basic_publish(
+         exchange = '',
+         routing_key = 'lsda_tasks',
+         body = '{0}:{1}:{2}'.format(job, task_id, commit)
+      )
+
+   # Prepare a STDERR pipe to respond to the queue.
+   queue_name = channel.queue_declare(exclusive=True).method.queue
+
+   channel.queue_bind(
+      exchange = 'lsda_logs',
+      queue = queue_name,
+      routing_key = 'stderr.{0}'.format(task_id)
+   )
+   
+   # Handle the resulting output.
+   def output(channel, method, properties, body):
+      unpacked = json.loads(body)
+      
+      if unpacked['type'] == 'close':
+         raise DoneException
+      elif unpacked['level'] >= logging.WARN:
+         print unpacked['message']
+   
+   # Process output from the invocation of the script.
+   channel.basic_consume(output, queue=queue_name, no_ack=True)
+   
+   try:
+      channel.start_consuming()
+   except DoneException:
+      channel.stop_consuming()
