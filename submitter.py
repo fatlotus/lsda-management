@@ -10,7 +10,8 @@ class DoneException(Exception):
    pass
 
 # Set up the connection to AMQP.
-connection = pika.BlockingConnection(pika.ConnectionParameters('127.0.0.1'))
+connection = pika.BlockingConnection(pika.ConnectionParameters(
+  'amqp.lsda.cs.uchicago.edu'))
 channel = connection.channel()
 
 channel.queue_declare("lsda_tasks", durable=True)
