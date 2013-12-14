@@ -437,7 +437,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       
       # Start the local IPython controller.
       ip_address = _lookup_ip_address()
-      command = [ "/usr/local/bin/ipcontroller", "--ip={0}".format(ip_address)]
+      command = [ "/usr/local/bin/ipcontroller", "--no-secure",
+                  "--init", "--ip={0}".format(ip_address)]
       controller_job = subprocess.Popen(command, stderr=subprocess.PIPE)
       
       try:
