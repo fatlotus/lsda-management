@@ -19,11 +19,12 @@ channel.queue_declare("lsda_tasks", durable=True)
 
 # Fetch all branches pushed
 branches_to_run = sys.argv[1:]
+commits_to_run = [ ]
 
 # Ensure that only submission branches are pushed.
-commits_to_run = [ x for x in branches_to_run
-                     if x.startswith('refs/heads/submissions/') ]
-
+for branch in branches_to_run:
+   if branch.startswith('refs/heads/submissions/'):
+      commits_to_run.append(branch[11:])
 
 # Submit each commit serially.
 for commit in commits_to_run:
