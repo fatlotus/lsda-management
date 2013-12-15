@@ -287,9 +287,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       # Ensure that we don't busy wait.
       gevent.sleep(1)
       
-      # Consume the next event.
-      method_frame, header_frame, body = (
-        self.amqp_channel.basic_get(self.queue_name))
+      # Consume the next event.      
+      with self.logs_handler.semaphore:
+         method_frame, header_frame, body = (
+           self.amqp_channel.basic_get(self.queue_name))
       
       # Mask on an empty queue.
       if method_frame:
@@ -350,7 +351,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          # ACK the AMQP task. Since we're trusting ZooKeeper for once-
          # only delivery, we can afford to let this fall off the stack
          # occasionally.
-         self.amqp_channel.basic_ack(method_frame.delivery_tag)
+         with self.logs_handler.semaphore:
+            self.amqp_channel.basic_ack(method_frame.delivery_tag)
    
    @forever
    def _has_engine_task_to_perform(self, task_id):
