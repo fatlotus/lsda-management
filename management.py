@@ -392,13 +392,17 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       controller is active.
       """
       
+      # Prepare the invocation of the first engine.
+      engine_call = [
+        "/usr/local/bin/ipengine", "--url={0}".format(controller_url)]
+      
+      # Record the arguments.
+      logging.info("Starting ipengine cmd={0!r}".format(engine_call))
+      
       # Launch the IPython engine.
-      engine = subprocess.Popen(
-        ["/usr/local/bin/ipengine", "--url={0}".format(controller_url)],
-        
-        stderr = subprocess.STDOUT,
-        stdout = subprocess.PIPE
-      )
+      engine = subprocess.Popen(engine_call,
+                                  stderr = subprocess.STDOUT,
+                                  stdout = subprocess.PIPE)
       
       try:
          # Asynchronously log data from stdout/stderr.
@@ -439,6 +443,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       ip_address = _lookup_ip_address()
       command = [ "/usr/local/bin/ipcontroller", "--no-secure",
                   "--init", "--ip={0}".format(ip_address)]
+      
+      # Record the arguments.
+      logging.info("Starting ipcontroller cmd={0!r}".format(command))
+      
       controller_job = subprocess.Popen(command, stderr=subprocess.PIPE)
       
       try:
