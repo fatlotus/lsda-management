@@ -363,7 +363,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             # interrupt when the current URL changes.
             
             controller_url = self.zookeeper.get('/{0}'.format(task_id),
-              partial(gevent.spawn, has_controller.interrupt))
+              partial(gevent.spawn, has_controller.interrupt))[0]
             
          except NoNodeError:
             has_controller.interrupt()
