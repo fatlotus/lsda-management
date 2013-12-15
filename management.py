@@ -23,7 +23,7 @@ import pika
 
 # Finally, import the stdlib.
 import re, socket, argparse, sys, logging, time, uuid, json, shutil, tempfile
-import base64
+import base64, os
 from functools import wraps, partial
 
 def forever(func):
@@ -264,6 +264,11 @@ class EngineOrControllerRunner(ZooKeeperAgent):
    controller or IPython engine task.
    """
    
+   STUPID_JSON = (
+     '/home/lsda/.ipython/profile_default/' +
+     'security/ipcontroller-engine.json'
+   )
+   
    def __init__(self, zookeeper, amqp_channel, queue_name, logs_handler):
       # Initialize the connection to ZooKeeper.
       super(EngineOrControllerRunner, self).__init__(zookeeper)
@@ -362,14 +367,14 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             # Retrieve the current controller from ZooKeeper, and trigger an
             # interrupt when the current URL changes.
             
-            controller_url = self.zookeeper.get('/{0}'.format(task_id),
+            controller_info = self.zookeeper.get('/{0}'.format(task_id),
               partial(gevent.spawn, has_controller.interrupt))[0]
             
          except NoNodeError:
             has_controller.interrupt()
               # If we couldn't find the controller, skip ahead.
          
-         self._has_controller(controller_url)
+         self._has_controller(controller_info)
            # Trigger the next level of processing.
       
       with Interruptable("No controller ready") as no_controller:
@@ -386,15 +391,24 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             wait_forever()
    
    @forever
-   def _has_controller(self, controller_url):
+   def _has_controller(self, controller_info):
       """
       This function ensures that the engine remains running while the
       controller is active.
       """
+
+      # Create the parent directory for the IPython configuration file.
+      try:
+         os.makedirs(os.path.dirname(self.__class__.STUPID_JSON))
+      except OSError:
+         pass
+      
+      # Save the stupid IPython profile configuration file.
+      with open(self.__class__.STUPID_JSON, 'w+') as fp:
+         fp.write(controller_info)
       
       # Prepare the invocation of the first engine.
-      engine_call = [
-        "/usr/local/bin/ipengine", "--url={0}".format(controller_url)]
+      engine_call = [ "/usr/local/bin/ipengine" ]
       
       # Record the arguments.
       logging.info("Starting ipengine cmd={0!r}".format(engine_call))
@@ -441,8 +455,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       
       # Start the local IPython controller.
       ip_address = _lookup_ip_address()
-      command = [ "/usr/local/bin/ipcontroller", "--no-secure",
-                  "--init", "--ip={0}".format(ip_address)]
+      command = [ "/usr/local/bin/ipcontroller", "--init",
+                  "--ip={0}".format(ip_address)]
       
       # Record the arguments.
       logging.info("Starting ipcontroller cmd={0!r}".format(command))
@@ -454,16 +468,14 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          # available for connections.
          while True:
             line = controller_job.stderr.readline()
-            match = re.search(r'hub listening on ([^ ]+)', line,
-                               flags=re.IGNORECASE)
-            if match:
-               controller_url = match.group(1)
+            if 'scheduler started' in line.lower():
+               controller_info = open(self.__class__.STUPID_JSON).read()
                break
          
          # Notify ZooKeeper that we've started.
          try:
             self.zookeeper.create('/{0}'.format(task_id), ephemeral = True,
-               value = controller_url)
+               value = controller_info)
          except NodeExistsError:
             logging.warn('Potential race condition in task_id or done/task_id.')
             finish_job()
@@ -508,13 +520,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                main_job.wait()
                task.join()
                
-               # Ensure that the controller finishes after the main job.
-               try:
-                  controller_job.terminate()
-               except OSError:
-                  pass
-               controller_job.wait()
-               
             finally:
                # Clean up old directory trees.
                shutil.rmtree(code_directory)
@@ -533,6 +538,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          # permission.
          try:
             controller_job.terminate()
+            controller_job.wait()
          except OSError:
             pass
 
