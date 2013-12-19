@@ -29,7 +29,7 @@ git commit --allow-empty -m "AUTO: Add output of main.ipynb to repository."
 
 # Push the results back to Git.
 git tag -a "responses-to-$BRANCH-$NONCE" -m "AUTO: Add output files."
-git push origin "$BRANCH:responses-to-$BRANCH-latest" \
+git push --force origin "$BRANCH:responses-to-$BRANCH-latest" \
   "responses-to-$BRANCH-$NONCE"
 
 # Remove temporary directories used in the process.
