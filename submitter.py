@@ -57,10 +57,19 @@ for commit in commits_to_run:
    def output(channel, method, properties, body):
       unpacked = json.loads(body)
       
+      # Clear the progress message posted earlier.
+      sys.stderr.write("                           \r")
+      sys.stderr.flush()
+      
       if unpacked['type'] == 'close':
          raise DoneException
       elif unpacked['level'] >= logging.WARN:
-         print unpacked['message']
+         sys.stderr.write(unpacked['message'] + "\n")
+         sys.stderr.flush()
+   
+   # Inform the user that execution has not yet started.
+   sys.stderr.write("Waiting for an instance...\r")
+   sys.stderr.flush()
    
    # Process output from the invocation of the script.
    channel.basic_consume(output, queue=queue_name, no_ack=True)
