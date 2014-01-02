@@ -10,8 +10,9 @@ echo
 # Prepare scripts.
 TEMP_DIRECTORY="$(mktemp -d)"
 NONCE="$(date +%s)"
-REPO="git@localhost:assignment-one.git"
-BRANCH="$QUERY_STRING"
+REPO="git@localhost:$HTTP_X_REPOSITORY_NAME"
+BRANCH="$HTTP_X_BRANCH_NAME"
+FILE_NAME="$HTTP_X_FILE_NAME"
 
 cd $TEMP_DIRECTORY
 
@@ -22,10 +23,10 @@ git clone "$REPO" -b "$BRANCH" . 0</dev/null
 git config --local user.name "Cylon Jeremy"
 git config --local user.email open-source@fatlotus.com
 
-# Add the modified main.ipynb file back in.
-cat > ./main.ipynb
-git add ./main.ipynb
-git commit --allow-empty -m "AUTO: Add output of main.ipynb to repository."
+# Add the modified file to the repository.
+cat > "./$FILE_NAME"
+git add "./$FILE_NAME"
+git commit --allow-empty -m "AUTO: Add output of $FILE_NAME to repository."
 
 # Push the results back to Git.
 git tag -a "responses-to-$BRANCH-$NONCE" -m "AUTO: Add output files."
