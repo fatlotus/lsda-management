@@ -409,42 +409,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       with open(self.__class__.STUPID_JSON, 'w+') as fp:
          fp.write(controller_info)
       
-      # Prepare the invocation of the first engine.
-      engine_call = [ "/usr/local/bin/ipengine" ]
-      
-      # Record the arguments.
-      logging.info("Starting ipengine cmd={0!r}".format(engine_call))
-      
-      # Launch the IPython engine.
-      engine = subprocess.Popen(engine_call,
-                                  stderr = subprocess.STDOUT,
-                                  stdout = subprocess.PIPE)
-      
-      try:
-         # Asynchronously log data from stdout/stderr.
-         @gevent.spawn
-         def task():
-            while True:
-               line = engine.stdout.readline()
-               if not line: return
-               self.logs_handler.emit_unformatted(line[:-1],
-                 level = logging.INFO)
-         
-         # Wait for the engine to complete.
-         engine.wait()
-         task.join()
-         
-         # Report engine shutdown.
-         if engine.returncode != 0:
-            logging.error('Subprocess failed with status={0}'
-                             .format(engine.returncode))
-         else:
-            logging.info('Subprocess exited cleanly')
-      finally:
-         try:
-            engine.terminate()
-         except OSError:
-            pass
+      # Run the main script in the sandbox.
+      self._run_in_sandbox(commit, ["ipengine"])
    
    @forever
    def _has_controller_task_to_perform(self, task_id, finish_job, commit):
@@ -484,47 +450,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
               # Generally this is a sign of a bad task -- but dragons remain.
          
          try:
-            # Create a working directory for this project.
-            code_directory = tempfile.mkdtemp()
-            
-            try:
-               # Construct reference to the current code repository.
-               git_url = (
-                  "http://gitolite-internal.lsda.cs.uchicago.edu:1337/" +
-                  "assignment-one.git"
-               )
-               
-               # Checking out the proper source code.
-               subprocess.call(["/usr/bin/git", "clone", "--quiet",
-                 git_url, code_directory])
-               
-               # Checking out the proper source code.
-               subprocess.call(["/usr/bin/git", "checkout", commit],
-                 cwd = code_directory)
-               
-               # Trigger main IPython job.
-               main_job = subprocess.Popen(
-                 [ "/usr/bin/python", "program.py" ],
-                 
-                 cwd = code_directory,
-                 stdout = subprocess.PIPE,
-                 stderr = subprocess.STDOUT
-               )
-               
-               # Asynchronously log data from stdout/stderr.
-               @gevent.spawn
-               def task():
-                  while True:
-                     line = main_job.stdout.readline()
-                     if not line: return
-                     self.logs_handler.emit_unformatted(line[:-1])
-               
-               main_job.wait()
-               task.join()
-               
-            finally:
-               # Clean up old directory trees.
-               shutil.rmtree(code_directory)
+            # Run the main script in the sandbox.
+            self._run_in_sandbox(commit, ["main"])
             
             # Mark this controller as complete, which will deallocate the task
             # and expire the workers.
@@ -543,6 +470,56 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             controller_job.wait()
          except OSError:
             pass
+   
+   def _run_in_sandbox(self, commit, command):
+      """
+      Runs the given type of process inside a project sandbox.
+      """
+      
+      # Create a working directory for this project.
+      code_directory = tempfile.mkdtemp()
+      
+      try:
+         # Construct reference to the current code repository.
+         git_url = (
+            "http://gitolite-internal.lsda.cs.uchicago.edu:1337/" +
+            "assignment-one.git"
+         )
+         
+         # Checking out the proper source code.
+         subprocess.call(["/usr/bin/git", "clone", "--quiet",
+           git_url, code_directory])
+         
+         # Checking out the proper source code.
+         subprocess.call(["/usr/bin/git", "checkout", commit],
+           cwd = code_directory)
+         
+         # Trigger main IPython job.
+         main_job = subprocess.Popen(
+           ["/usr/bin/python", os.path.join(__file__, "sandbox.py")] + command,
+           
+           cwd = code_directory,
+           stdout = subprocess.PIPE,
+           stderr = subprocess.STDOUT
+         )
+         
+         # Asynchronously log data from stdout/stderr.
+         @gevent.spawn
+         def task():
+            while True:
+               line = main_job.stdout.readline()
+               if not line: return
+               self.logs_handler.emit_unformatted(line[:-1])
+         
+         main_job.wait()
+         task.join()
+         
+      finally:
+         # Kill all processes in the sandbox.
+         subprocess.check_call(["killall", "-u", "sandbox", "-m", "."])
+         
+         # Clean up old directory trees.
+         shutil.rmtree(code_directory)
 
 def main():
    # Configure logging
