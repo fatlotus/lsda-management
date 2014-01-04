@@ -19,6 +19,7 @@ connection = pika.BlockingConnection(pika.ConnectionParameters(
 channel = connection.channel()
 
 channel.queue_declare("lsda_tasks", durable=True)
+channel.exchange_declare("lsda_logs", type='topic')
 
 # Fetch all branches pushed
 branches_to_run = sys.argv[1:]
