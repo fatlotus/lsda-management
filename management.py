@@ -298,7 +298,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          kind, task_id, base64_commit = body.split(':', 2)
          
          # Decode the branch name to run.
-         branch_name = base64.b64decode(base64_commit)
+         commit = base64.b64decode(base64_commit)
          
          with Interruptable("AMQP Task available") as task_available:
             
@@ -307,8 +307,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                      partial(gevent.spawn, task_available.interrupt)):
                
                # Log the start of execution.
-               logging.info('Processing task={0!r}, kind={1!r}, branch={2!r}'.
-                 format(task_id, kind, branch_name))
+               logging.info('Processing task={0!r}, kind={1!r}, commit={2!r}'.
+                 format(task_id, kind, commit))
                
                # Associate logs with this task.
                self.logs_handler.task_id = task_id
@@ -318,11 +318,11 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                      
                      # Launch the correct type of worker.
                      if kind == 'engine':
-                        self._has_engine_task_to_perform(task_id)
+                        self._has_engine_task_to_perform(task_id, commit)
                      
                      elif kind == 'controller':
                         self._has_controller_task_to_perform(
-                          task_id, still_working.interrupt, branch_name)
+                          task_id, still_working.interrupt, commit)
                      
                      else:
                         logging.warn("Received task of unknown type {0!r}"
@@ -355,7 +355,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             self.amqp_channel.basic_ack(method_frame.delivery_tag)
    
    @forever
-   def _has_engine_task_to_perform(self, task_id):
+   def _has_engine_task_to_perform(self, task_id, commit):
       """
       This function manages the connection to ZooKeeper.
       """
@@ -376,7 +376,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             has_controller.interrupt()
               # If we couldn't find the controller, skip ahead.
          
-         self._has_controller(controller_info)
+         self._has_controller(controller_info, commit)
            # Trigger the next level of processing.
       
       with Interruptable("No controller ready") as no_controller:
@@ -393,7 +393,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             wait_forever()
    
    @forever
-   def _has_controller(self, controller_info):
+   def _has_controller(self, controller_info, commit):
       """
       This function ensures that the engine remains running while the
       controller is active.
