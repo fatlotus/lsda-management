@@ -422,9 +422,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       gevent.sleep(1)
       
       # Start the local IPython controller.
-      ip_address = _lookup_ip_address()
-      command = [ "/usr/local/bin/ipcontroller", "--init",
-                  "--ip={0}".format(ip_address)]
+      command = ["/usr/local/bin/ipcontroller", "--init", "--ip=*"]
       
       # Record the arguments.
       logging.info("Starting ipcontroller cmd={0!r}".format(command))
@@ -516,7 +514,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          
       finally:
          # Kill all processes in the sandbox.
-         subprocess.check_call(["killall", "-u", "sandbox", "-9", "-w"])
+         subprocess.check_call(["/usr/bin/killall", "-u", "sandbox", "-9",
+           "-w"])
          
          # Clean up old directory trees.
          shutil.rmtree(code_directory)

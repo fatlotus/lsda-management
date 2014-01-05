@@ -9,7 +9,13 @@
 import os
 import pwd
 import sys
+import stat
 import resource
+import shutil
+
+# Bane of my existence... :(
+MAGIC_JSON_FILES = '.ipython/profile_default/security'
+HOME_DIR = '/home/lsda' # <- Don't put a slash at the end!
 
 # Specifies what modules are allowed inside the sandbox. Unfortunately these
 # modules will have root access to the computer.
@@ -30,6 +36,37 @@ prefix = os.getcwd()
 # Limit the number of processes in the sandbox.
 resource.setrlimit(resource.RLIMIT_NOFILE, (1024, 1024))
 resource.setrlimit(resource.RLIMIT_NPROC, (100, 100))
+
+# Create proper environment variables.
+os.environ['HOME'] = '/tmp'
+os.umask(0)
+
+# Set up necessary UNIX utilities.
+try:
+   os.mkdir('tmp', 0777)
+   os.mkdir('dev', 0555)
+
+   os.mkdir('.ipython', 0555)
+   os.mkdir('.ipython/profile_default', 0555)
+   os.mkdir('.ipython/profile_default/security', 0555)
+
+   os.mknod('dev/null',    0666 | stat.S_IFCHR, os.makedev(1, 3))
+   os.mknod('dev/random',  0666 | stat.S_IFCHR, os.makedev(1, 8))
+   os.mknod('dev/urandom', 0444 | stat.S_IFCHR, os.makedev(1, 9))
+
+   # Add IPython cookes into the mix.
+   os.makedirs(MAGIC_JSON_FILES, 0555)
+
+   for item in os.listdir(os.path.join(HOME_DIR, MAGIC_JSON_FILES)):
+      src = os.path.join(HOME_DIR, MAGIC_JSON_FILES, item)
+      dst = os.path.join(MAGIC_JSON_FILES, item)
+      
+      shutil.copyfile(src, dst)
+      os.chmod(dst, 0555)
+
+except OSError:
+   pass
+
 
 # Actually drop down to an unprivileged user.
 os.chroot('.')
@@ -54,3 +91,4 @@ elif sys.argv[1] == 'ipengine':
    
    import IPython.parallel.apps.ipengineapp
    IPython.parallel.apps.ipengineapp.launch_new_instance()
+   
