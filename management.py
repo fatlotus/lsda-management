@@ -480,6 +480,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       
       # Create a working directory for this project.
       code_directory = tempfile.mkdtemp()
+      os.chmod(code_directory, 0755)
       
       # Construct reference to the current code repository.
       git_url = (
