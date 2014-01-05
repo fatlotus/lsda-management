@@ -12,6 +12,7 @@ import sys
 import stat
 import resource
 import shutil
+import subprocess
 
 # Bane of my existence... :(
 MAGIC_JSON_FILES = '.ipython/profile_default/security'
@@ -68,6 +69,18 @@ try:
 except OSError:
    pass
 
+# Spawn a cleanup daemon.
+if os.fork() != 0:
+   os.wait()
+   
+   # Kill all dangling processes.
+   subprocess.call(['/usr/bin/killall', '-u', 'sandbox', '-9', '-w'])
+   
+   # Delete the sandbox.
+   subprocess.call(['/bin/rm', '-rf', os.path.abspath('.')])
+   
+   sys.exit(0)
+
 # Actually drop down to an unprivileged user.
 os.chroot('.')
 os.setuid(user_id)
@@ -78,8 +91,8 @@ for item in sys.path:
    if item.startswith(prefix):
       new_path.append(item[len(prefix):])
 
-sys.path.append('/')
 sys.path = new_path
+sys.path.append('/')
 
 if sys.argv[1] == 'main':
    # Run "main.py"

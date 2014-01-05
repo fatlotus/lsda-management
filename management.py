@@ -481,48 +481,39 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       # Create a working directory for this project.
       code_directory = tempfile.mkdtemp()
       
-      try:
-         # Construct reference to the current code repository.
-         git_url = (
-            "http://gitolite-internal.lsda.cs.uchicago.edu:1337/" +
-            "assignment-one.git"
-         )
-         
-         # Checking out the proper source code.
-         subprocess.call(["/usr/bin/git", "clone", "--quiet",
-           git_url, code_directory])
-         
-         # Checking out the proper source code.
-         subprocess.call(["/usr/bin/git", "checkout", commit],
-           cwd = code_directory)
-         
-         # Trigger main IPython job.
-         main_job = subprocess.Popen(
-           ["/usr/bin/sudo", "/worker/sandbox.py"] + command,
-           
-           cwd = code_directory,
-           stdout = subprocess.PIPE,
-           stderr = subprocess.STDOUT
-         )
-         
-         # Asynchronously log data from stdout/stderr.
-         @gevent.spawn
-         def task():
-            while True:
-               line = main_job.stdout.readline()
-               if not line: return
-               self.logs_handler.emit_unformatted(line[:-1])
-         
-         main_job.wait()
-         task.join()
-         
-      finally:
-         # Kill all processes in the sandbox.
-         subprocess.call(["/usr/bin/sudo",
-           "/usr/bin/killall", "-u", "sandbox", "-9", "-w"])
-         
-         # Clean up old directory trees.
-         shutil.rmtree(code_directory)
+      # Construct reference to the current code repository.
+      git_url = (
+         "http://gitolite-internal.lsda.cs.uchicago.edu:1337/" +
+         "assignment-one.git"
+      )
+      
+      # Checking out the proper source code.
+      subprocess.call(["/usr/bin/git", "clone", "--quiet",
+        git_url, code_directory])
+      
+      # Checking out the proper source code.
+      subprocess.call(["/usr/bin/git", "checkout", commit],
+        cwd = code_directory)
+      
+      # Trigger main IPython job.
+      main_job = subprocess.Popen(
+        ["/usr/bin/sudo", "/worker/sandbox.py"] + command,
+        
+        cwd = code_directory,
+        stdout = subprocess.PIPE,
+        stderr = subprocess.STDOUT
+      )
+      
+      # Asynchronously log data from stdout/stderr.
+      @gevent.spawn
+      def task():
+         while True:
+            line = main_job.stdout.readline()
+            if not line: return
+            self.logs_handler.emit_unformatted(line[:-1])
+      
+      main_job.wait()
+      task.join()
 
 def main():
    # Configure logging
