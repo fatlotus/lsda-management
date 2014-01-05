@@ -496,7 +496,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          
          # Trigger main IPython job.
          main_job = subprocess.Popen(
-           ["/usr/bin/python", os.path.join(__file__, "sandbox.py")] + command,
+           ["/usr/bin/python", os.path.join(os.path.dirname(__file__),
+            "sandbox.py")] + command,
            
            cwd = code_directory,
            stdout = subprocess.PIPE,
@@ -516,7 +517,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          
       finally:
          # Kill all processes in the sandbox.
-         subprocess.check_call(["killall", "-u", "sandbox", "-m", "."])
+         subprocess.check_call(["killall", "-u", "sandbox", "-9", "-w"])
          
          # Clean up old directory trees.
          shutil.rmtree(code_directory)
