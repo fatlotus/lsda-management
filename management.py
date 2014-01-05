@@ -316,17 +316,21 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                try:
                   with Interruptable("Processing AMQP task") as still_working:
                      
-                     # Launch the correct type of worker.
-                     if kind == 'engine':
-                        self._has_engine_task_to_perform(task_id, commit)
+                     try:
+                        # Launch the correct type of worker.
+                        if kind == 'engine':
+                           self._has_engine_task_to_perform(task_id, commit)
+                        
+                        elif kind == 'controller':
+                           self._has_controller_task_to_perform(
+                             task_id, still_working.interrupt, commit)
+                        
+                        else:
+                           logging.warn("Received task of unknown type {0!r}"
+                                           .format(kind))
                      
-                     elif kind == 'controller':
-                        self._has_controller_task_to_perform(
-                          task_id, still_working.interrupt, commit)
-                     
-                     else:
-                        logging.warn("Received task of unknown type {0!r}"
-                                        .format(kind))
+                     except Exception:
+                        logging.exception('Unhandled exception in daemon')
                   
                finally:
                   # Emitting a closing handler.
