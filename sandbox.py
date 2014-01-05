@@ -68,7 +68,6 @@ try:
 except OSError:
    pass
 
-
 # Actually drop down to an unprivileged user.
 os.chroot('.')
 os.setuid(user_id)
@@ -79,16 +78,21 @@ for item in sys.path:
    if item.startswith(prefix):
       new_path.append(item[len(prefix):])
 
+sys.path.append('/')
 sys.path = new_path
 
 if sys.argv[1] == 'main':
    # Run "main.py"
+   
+   sys.argv = ['main.py']
    
    import runpy
    runpy.run_module('main', run_name = '__main__')
 
 elif sys.argv[1] == 'ipengine':
    # Run "ipengine"
+   
+   sys.argv = ['ipengine']
    
    import IPython.parallel.apps.ipengineapp
    IPython.parallel.apps.ipengineapp.launch_new_instance()
