@@ -23,7 +23,8 @@ ALLOWED_MODULES = [
    "os",
    "pwd",
    "sys",
-   "IPython"
+   "IPython",
+   "apport.fileutils"
 ]
 
 for module in ALLOWED_MODULES:
