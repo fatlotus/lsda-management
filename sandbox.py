@@ -25,6 +25,7 @@ ALLOWED_MODULES = [
    "pwd",
    "sys",
    "IPython",
+   "IPython.parallel",
    "apport.fileutils"
 ]
 
@@ -61,7 +62,7 @@ try:
 
    for item in os.listdir(os.path.join(HOME_DIR, MAGIC_JSON_FILES)):
       src = os.path.join(HOME_DIR, MAGIC_JSON_FILES, item)
-      dst = os.path.join(MAGIC_JSON_FILES, item)
+      dst = os.path.join('tmp', MAGIC_JSON_FILES, item)
       
       shutil.copyfile(src, dst)
       os.chmod(dst, 0777)
