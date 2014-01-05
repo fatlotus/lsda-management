@@ -514,7 +514,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          
       finally:
          # Kill all processes in the sandbox.
-         subprocess.check_call(["/usr/bin/sudo",
+         subprocess.call(["/usr/bin/sudo",
            "/usr/bin/killall", "-u", "sandbox", "-9", "-w"])
          
          # Clean up old directory trees.
