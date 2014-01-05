@@ -56,14 +56,14 @@ try:
    os.mknod('dev/urandom', 0444 | stat.S_IFCHR, os.makedev(1, 9))
 
    # Add IPython cookes into the mix.
-   os.makedirs(MAGIC_JSON_FILES, 0555)
+   os.makedirs(MAGIC_JSON_FILES, 0777)
 
    for item in os.listdir(os.path.join(HOME_DIR, MAGIC_JSON_FILES)):
       src = os.path.join(HOME_DIR, MAGIC_JSON_FILES, item)
       dst = os.path.join(MAGIC_JSON_FILES, item)
       
       shutil.copyfile(src, dst)
-      os.chmod(dst, 0555)
+      os.chmod(dst, 0777)
 
 except OSError:
    pass
