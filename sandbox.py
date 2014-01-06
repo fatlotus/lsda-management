@@ -14,6 +14,7 @@ import resource
 import shutil
 import subprocess
 import tempfile
+import json
 
 # Bane of my existence... :(
 MAGIC_JSON_FILES = '.ipython/profile_default/security'
@@ -32,7 +33,7 @@ ALLOWED_MODULES = [
    "IPython.parallel.apps.ipengineapp",
    "apport.fileutils",
    "_strptime",
-   "tornado.iostream"
+   "IPython.kernel.zmq.iostream"
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
@@ -41,6 +42,7 @@ u"".encode('utf-8').decode('utf-8').encode('ascii').decode('ascii')
 # Decide what user to run this script as.
 user_id = pwd.getpwnam('sandbox').pw_uid
 prefix = os.getcwd()
+connect_to_ip = None
 
 # Limit the number of processes in the sandbox.
 resource.setrlimit(resource.RLIMIT_NOFILE, (1024, 1024))
@@ -70,6 +72,10 @@ try:
       
       shutil.copyfile(src, dst)
       os.chmod(dst, 0777)
+      
+      if item == 'controller-engine.json':
+         contents = json.load(open(src, 'r'))
+         connect_to_ip = contents['location']
    
    # Add the stupid README file IPython apparently needs.
    os.makedirs(os.path.dirname(USELESS_README))
@@ -89,7 +95,16 @@ if os.fork() != 0:
    # Delete the sandbox.
    subprocess.call(['/bin/rm', '-rf', prefix])
    
+   if connect_to_ip:
+      subprocess.call(['/sbin/iptables', '-D', 'OUTPUT', '-p', 'tcp',
+        '-d', connect_to_ip, '-j', 'ACCEPT', '--dport', '1024:65535'])
+   
    sys.exit(0)
+
+# Only allow connections to the controller.
+if connect_to_ip:
+   subprocess.call(['/sbin/iptables', '-A', 'OUTPUT', '-p', 'tcp',
+     '-d', connect_to_ip, '-j', 'ACCEPT', '--dport', '1024:65535'])
 
 # Require the imported modules as late as possible.
 os.chdir('/') # <- beware of os.getcwd() calls in initializers!
