@@ -4,7 +4,6 @@
 # Date: 10 December 2013
 # 
 
-
 # Import the Python green threading library.
 from gevent import monkey; monkey.patch_all()
 from gevent.event import Event
@@ -380,7 +379,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             has_controller.interrupt()
               # If we couldn't find the controller, skip ahead.
          
-         self._has_controller(controller_info, branch)
+         self._has_controller(task_id, controller_info, branch)
            # Trigger the next level of processing.
       
       with Interruptable("No controller ready") as no_controller:
@@ -397,7 +396,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             wait_forever()
    
    @forever
-   def _has_controller(self, controller_info, branch):
+   def _has_controller(self, task_id, controller_info, branch):
       """
       This function ensures that the engine remains running while the
       controller is active.
@@ -414,7 +413,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          fp.write(controller_info)
       
       # Run the main script in the sandbox.
-      self._run_in_sandbox(branch, ["ipengine"])
+      self._run_in_sandbox(task_id, branch, ["ipengine"])
    
    @forever
    def _has_controller_task_to_perform(self, task_id, finish_job, branch):
@@ -453,7 +452,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          
          try:
             # Run the main script in the sandbox.
-            self._run_in_sandbox(branch, ["main"])
+            self._run_in_sandbox(task_id, branch, ["main"])
             
             # Mark this controller as complete, which will deallocate the task
             # and expire the workers.
@@ -463,6 +462,18 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                self.zookeeper.delete('/{0}'.format(task_id))
             except KazooException:
                pass
+            
+            # Inform the user how much time was consumed.
+            total_time = self.zookeeper.Counter('/usedtime/{0}'.format(task_id),
+                           default = 0.0)
+            components = [
+               int(total_time.value / 3600),
+               int(total_time.value / 60) % 60,
+               int(total_time.value) % 60
+            ]
+            self.logs_handler.emit_unformatted(
+              "Total computer time: {0}.".format(
+                ':'.join("{0:02d}".format(x) for x in components)))
          
       finally:
          # Ensure that we don't run a subprocess without ZooKeeper's
@@ -473,7 +484,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          except OSError:
             pass
    
-   def _run_in_sandbox(self, branch, command):
+   def _run_in_sandbox(self, task_id, branch, command):
       """
       Runs the given type of process inside a project sandbox.
       """
@@ -484,7 +495,13 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       
       # Extract the CNetID for this request (for ACLs)
       match = re.match(r'^submissions/([^/]+)/submit$', branch)
-      username = match.group(1) if match else None
+      username = match.group(1) if match else ''
+      
+      # Collect some per-task statistics.
+      remaining_time = self.zookeeper.Counter('/totaltime/{0}'.format(username),
+                         default=0.0)
+      total_time = self.zookeeper.Counter('/usedtime/{0}'.format(task_id),
+                     default=0.0)
       
       # Construct reference to the current code repository.
       git_url = (
@@ -497,29 +514,59 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         git_url, code_directory])
       
       # Checking out the proper source code.
-      subprocess.call(["/usr/bin/git", "checkout", commit],
+      subprocess.call(["/usr/bin/git", "checkout", branch],
         cwd = code_directory)
       
-      # Trigger main IPython job.
-      main_job = subprocess.Popen(
-        ["/usr/bin/sudo", "/worker/sandbox.py"] + command,
-        
-        cwd = code_directory,
-        stdout = subprocess.PIPE,
-        stderr = subprocess.STDOUT,
-        env = {'CNETID': username} 
-      )
-      
-      # Asynchronously log data from stdout/stderr.
-      @gevent.spawn
-      def task():
-         while True:
-            line = main_job.stdout.readline()
-            if not line: return
-            self.logs_handler.emit_unformatted(line[:-1])
-      
-      main_job.wait()
-      task.join()
+      try:
+         
+         # Trigger main IPython job.
+         main_job = subprocess.Popen(
+           ["/usr/bin/sudo", "/worker/sandbox.py"] + command,
+           
+           cwd = code_directory,
+           stdout = subprocess.PIPE,
+           stderr = subprocess.STDOUT,
+           env = {'CNETID': username} 
+         )
+         
+         # Count total per-user execution time.
+         @gevent.spawn
+         def drain_quarters():
+            # Continue taking time in ten-second increments.
+            while remaining_time.value > 0:
+               remaining_time -= 10
+               gevent.sleep(10)
+            
+            # Kill the job when we're out.
+            logging.error('Job killed -- out of time.')
+            main_job.kill()
+         
+         # Asynchronously log data from stdout/stderr.
+         @gevent.spawn
+         def stderr_copier():
+            while True:
+               line = main_job.stdout.readline()
+               if not line: return
+               self.logs_handler.emit_unformatted(line[:-1])
+         
+         # Actually wait for completion.
+         start_time = time.time()
+         main_job.wait()
+         finish_time = time.time()
+         
+         # Record how long this took.
+         total_time += finish_time - start_time
+         
+         # Finish remaining subtasks
+         stderr_copier.join()
+         drain_quarters.kill()
+         
+      finally:
+         # Clean up main job.
+         try:
+            main_job.kill()
+         except OSError:
+            pass
 
 def main():
    # Configure logging

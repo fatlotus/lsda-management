@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import json
 import logging
+import atexit
 
 # Bane of my existence... :(
 MAGIC_JSON_FILES = '.ipython/profile_default/security'
@@ -48,7 +49,7 @@ prefix = os.getcwd()
 connect_to_ip = None
 
 # Determine if the user running this script is an administrator.
-username = os.environ['CNETID']
+username = os.environ.get('CNETID', '')
 
 # Limit the number of processes in the sandbox.
 resource.setrlimit(resource.RLIMIT_NOFILE, (1024, 1024))
@@ -97,22 +98,23 @@ except OSError:
 
 # Spawn a cleanup daemon.
 if os.fork() != 0:
+   @atexit.register
+   def cleanup_handler():
+      # Kill all dangling processes.
+      subprocess.call(['/usr/bin/killall', '-u', 'sandbox', '-9', '-w'])
+      
+      # Delete the sandbox.
+      subprocess.call(['/bin/rm', '-rf', prefix])
+      
+      if connect_to_ip:
+         subprocess.call(['/sbin/iptables', '-D', 'OUTPUT', '-p', 'tcp',
+           '-d', connect_to_ip, '-j', 'ACCEPT', '--dport', '1024:65535'])
+      
+      # Allow backbone submissions through.
+      if username == 'backbone':
+         subprocess.call(['/sbin/iptables', '-D', 'OUTPUT', '-j', 'ACCEPT'])
+   
    os.wait()
-   
-   # Kill all dangling processes.
-   subprocess.call(['/usr/bin/killall', '-u', 'sandbox', '-9', '-w'])
-   
-   # Delete the sandbox.
-   subprocess.call(['/bin/rm', '-rf', prefix])
-   
-   if connect_to_ip:
-      subprocess.call(['/sbin/iptables', '-D', 'OUTPUT', '-p', 'tcp',
-        '-d', connect_to_ip, '-j', 'ACCEPT', '--dport', '1024:65535'])
-   
-   # Allow backbone submissions through.
-   if username == 'backbone':
-      subprocess.call(['/sbin/iptables', '-D', 'OUTPUT', '-j', 'ACCEPT'])
-   
    sys.exit(0)
 
 # Only allow connections to the controller.
