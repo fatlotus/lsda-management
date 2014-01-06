@@ -17,6 +17,8 @@ import subprocess
 # Bane of my existence... :(
 MAGIC_JSON_FILES = '.ipython/profile_default/security'
 HOME_DIR = '/home/lsda' # <- Don't put a slash at the end!
+USELESS_README = (
+  'usr/local/lib/python2.7/dist-packages/IPython/config/profile/README_STARTUP')
 
 # Specifies what modules are allowed inside the sandbox. Unfortunately these
 # modules will have root access to the computer.
@@ -60,6 +62,7 @@ try:
 
    # Add IPython cookes into the mix.
    os.makedirs(os.path.join('home', MAGIC_JSON_FILES), 0777)
+   os.chown(os.path.join('home', MAGIC_JSON_FILES), user_id, user_id)
 
    for item in os.listdir(os.path.join(HOME_DIR, MAGIC_JSON_FILES)):
       src = os.path.join(HOME_DIR, MAGIC_JSON_FILES, item)
@@ -67,6 +70,11 @@ try:
       
       shutil.copyfile(src, dst)
       os.chmod(dst, 0777)
+   
+   # Add the stupid README file IPython apparently needs.
+   os.makedirs(os.path.dirname(USELESS_README))
+   with open(USELESS_README, 'w') as fp:
+      pass
 
 except OSError:
    pass
