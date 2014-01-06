@@ -26,7 +26,8 @@ ALLOWED_MODULES = [
    "sys",
    "IPython",
    "IPython.parallel",
-   "apport.fileutils"
+   "apport.fileutils",
+   "_strptime"
 ]
 
 for module in ALLOWED_MODULES:
