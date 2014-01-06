@@ -47,12 +47,19 @@ user_id = pwd.getpwnam('sandbox').pw_uid
 prefix = os.getcwd()
 connect_to_ip = None
 
+# Determine if the user running this script is an administrator.
+username = os.environ['CNETID']
+
 # Limit the number of processes in the sandbox.
 resource.setrlimit(resource.RLIMIT_NOFILE, (1024, 1024))
 resource.setrlimit(resource.RLIMIT_NPROC, (100, 100))
 
 # Create proper environment variables.
-os.environ['HOME'] = '/home'
+os.environ = {
+   'HOME': '/home',
+   'PATH': '/',
+   'LANG': 'en_US.UTF-8',
+}
 os.umask(0)
 
 # Set up necessary UNIX utilities.
@@ -102,12 +109,22 @@ if os.fork() != 0:
       subprocess.call(['/sbin/iptables', '-D', 'OUTPUT', '-p', 'tcp',
         '-d', connect_to_ip, '-j', 'ACCEPT', '--dport', '1024:65535'])
    
+   # Allow backbone submissions through.
+   if username == 'backbone':
+      subprocess.call(['/sbin/iptables', '-D', 'OUTPUT', '-j', 'ACCEPT'])
+   
    sys.exit(0)
 
 # Only allow connections to the controller.
 if connect_to_ip:
-   subprocess.call(['/sbin/iptables', '-A', 'OUTPUT', '-p', 'tcp',
+   subprocess.call(['/sbin/iptables', '-I', 'OUTPUT', '-p', 'tcp',
      '-d', connect_to_ip, '-j', 'ACCEPT', '--dport', '1024:65535'])
+
+# Allow the backbone to connect to the controller.
+if username == 'backbone':
+   subprocess.call(['/sbin/iptables', '-I', 'OUTPUT', '-j', 'ACCEPT'])
+   
+   ALLOWED_MODULES.append('boto')
 
 # Require the imported modules as late as possible.
 os.chdir('/') # <- beware of os.getcwd() calls in initializers!

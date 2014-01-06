@@ -295,10 +295,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       # Mask on an empty queue.
       if method_frame:
          # Parse the incoming message.
-         kind, task_id, base64_commit = body.split(':', 2)
+         kind, task_id, base64_branch = body.split(':', 2)
          
          # Decode the branch name to run.
-         commit = base64.b64decode(base64_commit)
+         branch = base64.b64decode(base64_branch)
          
          with Interruptable("AMQP Task available") as task_available:
             
@@ -307,8 +307,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                      partial(gevent.spawn, task_available.interrupt)):
                
                # Log the start of execution.
-               logging.info('Processing task={0!r}, kind={1!r}, commit={2!r}'.
-                 format(task_id, kind, commit))
+               logging.info('Processing task={0!r}, kind={1!r}, branch={2!r}'.
+                 format(task_id, kind, branch))
                
                # Associate logs with this task.
                self.logs_handler.task_id = task_id
@@ -319,11 +319,11 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                      try:
                         # Launch the correct type of worker.
                         if kind == 'engine':
-                           self._has_engine_task_to_perform(task_id, commit)
+                           self._has_engine_task_to_perform(task_id, branch)
                         
                         elif kind == 'controller':
                            self._has_controller_task_to_perform(
-                             task_id, still_working.interrupt, commit)
+                             task_id, still_working.interrupt, branch)
                         
                         else:
                            logging.warn("Received task of unknown type {0!r}"
@@ -359,7 +359,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             self.amqp_channel.basic_ack(method_frame.delivery_tag)
    
    @forever
-   def _has_engine_task_to_perform(self, task_id, commit):
+   def _has_engine_task_to_perform(self, task_id, branch):
       """
       This function manages the connection to ZooKeeper.
       """
@@ -380,7 +380,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             has_controller.interrupt()
               # If we couldn't find the controller, skip ahead.
          
-         self._has_controller(controller_info, commit)
+         self._has_controller(controller_info, branch)
            # Trigger the next level of processing.
       
       with Interruptable("No controller ready") as no_controller:
@@ -397,7 +397,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             wait_forever()
    
    @forever
-   def _has_controller(self, controller_info, commit):
+   def _has_controller(self, controller_info, branch):
       """
       This function ensures that the engine remains running while the
       controller is active.
@@ -414,10 +414,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          fp.write(controller_info)
       
       # Run the main script in the sandbox.
-      self._run_in_sandbox(commit, ["ipengine"])
+      self._run_in_sandbox(branch, ["ipengine"])
    
    @forever
-   def _has_controller_task_to_perform(self, task_id, finish_job, commit):
+   def _has_controller_task_to_perform(self, task_id, finish_job, branch):
       """
       This function manages the IPython controller subprocess.
       """
@@ -453,7 +453,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          
          try:
             # Run the main script in the sandbox.
-            self._run_in_sandbox(commit, ["main"])
+            self._run_in_sandbox(branch, ["main"])
             
             # Mark this controller as complete, which will deallocate the task
             # and expire the workers.
@@ -473,7 +473,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          except OSError:
             pass
    
-   def _run_in_sandbox(self, commit, command):
+   def _run_in_sandbox(self, branch, command):
       """
       Runs the given type of process inside a project sandbox.
       """
@@ -481,6 +481,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       # Create a working directory for this project.
       code_directory = tempfile.mkdtemp()
       os.chmod(code_directory, 0755)
+      
+      # Extract the CNetID for this request (for ACLs)
+      match = re.match(r'^submissions/([^/]+)/submit$', branch)
+      username = match.group(1) if match else None
       
       # Construct reference to the current code repository.
       git_url = (
@@ -502,7 +506,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         
         cwd = code_directory,
         stdout = subprocess.PIPE,
-        stderr = subprocess.STDOUT
+        stderr = subprocess.STDOUT,
+        env = {'CNETID': username} 
       )
       
       # Asynchronously log data from stdout/stderr.
