@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import tempfile
 import json
+import logging
 
 # Bane of my existence... :(
 MAGIC_JSON_FILES = '.ipython/profile_default/security'
@@ -138,7 +139,7 @@ if sys.argv[1] == 'main':
 elif sys.argv[1] == 'ipengine':
    # Run "ipengine"
    
-   sys.argv = ['ipengine']
+   sys.argv = ['ipengine', '--log-level', 'ERROR']
    
    import IPython.parallel.apps.ipengineapp
    IPython.parallel.apps.ipengineapp.launch_new_instance()
