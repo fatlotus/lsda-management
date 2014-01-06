@@ -32,6 +32,9 @@ ALLOWED_MODULES = [
 for module in ALLOWED_MODULES:
    __import__(module)
 
+# Allow people to use UTF-8 and ASCII codecs in this script.
+u"".encode('utf-8').decode('utf-8').encode('ascii').decode('ascii')
+
 # Decide what user to run this script as.
 user_id = pwd.getpwnam('sandbox').pw_uid
 prefix = os.getcwd()
@@ -75,7 +78,7 @@ if os.fork() != 0:
    subprocess.call(['/usr/bin/killall', '-u', 'sandbox', '-9', '-w'])
    
    # Delete the sandbox.
-   subprocess.call(['/bin/rm', '-rf', os.path.abspath('.')])
+   subprocess.call(['/bin/rm', '-rf', prefix])
    
    sys.exit(0)
 
