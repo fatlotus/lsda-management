@@ -49,7 +49,7 @@ prefix = os.getcwd()
 connect_to_ip = None
 
 # Determine if the user running this script is an administrator.
-username = os.environ.get('CNETID', '')
+username = sys.argv[2]
 
 # Limit the number of processes in the sandbox.
 resource.setrlimit(resource.RLIMIT_NOFILE, (1024, 1024))

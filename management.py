@@ -521,12 +521,11 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          
          # Trigger main IPython job.
          main_job = subprocess.Popen(
-           ["/usr/bin/sudo", "/worker/sandbox.py"] + command,
+           ["/usr/bin/sudo", "/worker/sandbox.py"] + command + [username],
            
            cwd = code_directory,
            stdout = subprocess.PIPE,
-           stderr = subprocess.STDOUT,
-           env = {'CNETID': username} 
+           stderr = subprocess.STDOUT
          )
          
          # Count total per-user execution time.
