@@ -31,9 +31,11 @@ ALLOWED_MODULES = [
    "IPython",
    "IPython.parallel",
    "IPython.parallel.apps.ipengineapp",
+   "IPython.kernel.zmq.iostream",
+   "IPython.core.completerlib",
+   "IPython.utils.rlineimpl",
    "apport.fileutils",
    "_strptime",
-   "IPython.kernel.zmq.iostream"
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
