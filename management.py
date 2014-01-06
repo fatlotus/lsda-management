@@ -329,7 +329,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                            logging.warn("Received task of unknown type {0!r}"
                                            .format(kind))
                      
-                     except Exception:
+                     except StandardError:
                         logging.exception('Unhandled exception in daemon')
                   
                finally:
