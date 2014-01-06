@@ -13,6 +13,7 @@ import stat
 import resource
 import shutil
 import subprocess
+import tempfile
 
 # Bane of my existence... :(
 MAGIC_JSON_FILES = '.ipython/profile_default/security'
@@ -31,10 +32,8 @@ ALLOWED_MODULES = [
    "IPython.parallel.apps.ipengineapp",
    "apport.fileutils",
    "_strptime",
+   "tornado.iostream"
 ]
-
-for module in ALLOWED_MODULES:
-   __import__(module)
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
 u"".encode('utf-8').decode('utf-8').encode('ascii').decode('ascii')
@@ -53,7 +52,7 @@ os.umask(0)
 
 # Set up necessary UNIX utilities.
 try:
-   os.mkdir('tmp', 0777)
+   os.mkdir('tmp', 0777); tempfile.tempdir = 'tmp'
    os.mkdir('home', 0777)
    os.mkdir('dev', 0555)
 
@@ -91,6 +90,12 @@ if os.fork() != 0:
    subprocess.call(['/bin/rm', '-rf', prefix])
    
    sys.exit(0)
+
+# Require the imported modules as late as possible.
+os.chdir('/') # <- beware of os.getcwd() calls in initializers!
+for module in ALLOWED_MODULES:
+   __import__(module)
+os.chdir(prefix)
 
 # Actually drop down to an unprivileged user.
 os.chroot('.')
