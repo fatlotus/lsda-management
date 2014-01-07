@@ -517,7 +517,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         cwd = code_directory)
       
       try:
-         
          # Trigger main IPython job.
          main_job = subprocess.Popen(
            ["/usr/bin/sudo", "/worker/sandbox.py"] + command + [username],
@@ -526,6 +525,14 @@ class EngineOrControllerRunner(ZooKeeperAgent):
            stdout = subprocess.PIPE,
            stderr = subprocess.STDOUT
          )
+         
+         # Asynchronously log data from stdout/stderr.
+         @gevent.spawn
+         def stderr_copier():
+            while True:
+               line = main_job.stdout.readline()
+               if not line: return
+               self.logs_handler.emit_unformatted(line[:-1])
          
          # Count total per-user execution time.
          @gevent.spawn
@@ -538,17 +545,11 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             # Kill the job when we're out.
             logging.error('Job killed -- out of time.')
             main_job.kill()
-         
-         # Asynchronously log data from stdout/stderr.
-         @gevent.spawn
-         def stderr_copier():
-            while True:
-               line = main_job.stdout.readline()
-               if not line: return
-               self.logs_handler.emit_unformatted(line[:-1])
+            stderr_copier.kill()
          
          # Actually wait for completion.
          start_time = time.time()
+         stderr_copier.join()
          main_job.wait()
          finish_time = time.time()
          
@@ -556,7 +557,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          total_time += finish_time - start_time
          
          # Finish remaining subtasks
-         stderr_copier.join()
          drain_quarters.kill()
          
       finally:
