@@ -149,6 +149,10 @@ for item in sys.path:
 sys.path = new_path
 sys.path.append('/')
 
+# Reopen STDOUT and STDERR so that things get written immediately.
+sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 0)
+
 if sys.argv[1] == 'main':
    # Run "main.py"
    
