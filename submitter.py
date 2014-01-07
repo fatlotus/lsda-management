@@ -4,11 +4,17 @@
 # Date: 14 December 2013
 #
 
-import pika, uuid, subprocess, json, sys, logging, base64
+import pika, uuid, subprocess, json, sys, logging, base64, prctl, signal
+import atexit, smtplib, boto.ses
 
 # Kinda janky, but it allows us to break out of the existing event loop.
 class DoneException(Exception):
    pass
+
+done_yet = False
+
+# Ensure that we die with the SSH parent.
+prctl.set_pdeathsig(signal.SIGINT)
 
 # Ensure that these branches can be fetched over HTTP.
 subprocess.check_call(['git', 'update-server-info'])
@@ -30,8 +36,37 @@ for branch in branches_to_run:
    if branch.startswith('refs/heads/submissions/'):
       commits_to_run.append(branch[11:])
 
+# Track completed branches.
+completed = set()
+
+def handle_end_of_submission(my_commit):
+   if my_commit in completed:
+      return
+   
+   conn = boto.ses.connect_to_region("us-east-1")
+   conn.send_email(
+      "\"Cylon Jeremy\" <jarcher@uchicago.edu>",
+      "AUTO: Connection Lost",
+      """\
+Hello there!
+
+It appears that a recent run of yours died unexpectedly. If you want to
+keep watching the output, visit {{LINK_URL}}. Note that if you make another
+submission this one will be terminated.
+
+If anything seems fishy please don't hesitate to contact me.
+
+All the best,
+-J
+""",
+      ["jarcher@uchicago.edu"]
+   )
+
 # Submit each commit serially.
 for commit in commits_to_run:
+   
+   # Notify the user if the connection breaks early.
+   atexit.register(handle_end_of_submission, commit)
    
    # Create the existing task to submit.
    task_id = uuid.uuid4()
@@ -79,3 +114,6 @@ for commit in commits_to_run:
       channel.start_consuming()
    except DoneException:
       channel.stop_consuming()
+   
+   # Track this commit as completed.
+   completed.add(commit)
