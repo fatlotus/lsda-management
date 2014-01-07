@@ -38,6 +38,7 @@ ALLOWED_MODULES = [
    "IPython.utils.rlineimpl",
    "apport.fileutils",
    "_strptime",
+   "xml.sax.expatreader"
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
@@ -126,7 +127,8 @@ if connect_to_ip:
 if username == 'backbone':
    subprocess.call(['/sbin/iptables', '-I', 'OUTPUT', '-j', 'ACCEPT'])
    
-   ALLOWED_MODULES.append('boto')
+   # Pre-load boto.
+   ALLOWED_MODULES += ['boto', 'boto.s3.connection']
 
 # Require the imported modules as late as possible.
 os.chdir('/') # <- beware of os.getcwd() calls in initializers!

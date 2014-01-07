@@ -466,14 +466,13 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             # Inform the user how much time was consumed.
             total_time = self.zookeeper.Counter('/usedtime/{0}'.format(task_id),
                            default = 0.0)
-            components = [
-               int(total_time.value / 3600),
-               int(total_time.value / 60) % 60,
-               int(total_time.value) % 60
-            ]
+            
             self.logs_handler.emit_unformatted(
-              "Total computer time: {0}.".format(
-                ':'.join("{0:02d}".format(x) for x in components)))
+            "Total computer time: {0:02d}:{1:02d}:{2:02.4f}.".format(
+              int(total_time.value / 3600),
+              int(total_time.value / 60) % 60,
+              total_time.value % 60
+            ))
          
       finally:
          # Ensure that we don't run a subprocess without ZooKeeper's
