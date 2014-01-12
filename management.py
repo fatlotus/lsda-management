@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 #
+### LSDA Management Daemon.
+# 
+# Running on every worker node, this script manages a persistent connection to
+# AMQP and ZooKeeper for the duration of each job.
+#
 # Author: Jeremy Archer <jarcher@uchicago.edu>
 # Date: 10 December 2013
 # 
@@ -497,8 +502,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       username = match.group(1) if match else ''
       
       # Collect some per-task statistics.
-      remaining_time = self.zookeeper.Counter('/totaltime/{0}'.format(username),
-                         default=0.0)
+      quota_used = self.zookeeper.Counter(
+                     '/quota_used/compute_time/{0}'.format(username),
+                     default=0.0)
+      quota_limit = self.zookeeper.Counter(
+                       '/quota_limit/compute_time/{0}'.format(username),
+                       default=0.0)
       total_time = self.zookeeper.Counter('/usedtime/{0}'.format(task_id),
                      default=0.0)
       
@@ -537,10 +546,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          # Count total per-user execution time.
          @gevent.spawn
          def drain_quarters():
-            # Continue taking time in ten-second increments.
-            while remaining_time.value > 0:
-               remaining_time -= 10
-               gevent.sleep(10)
+            # Continue taking time in five-second increments.
+            while quota_used.value < quota_limit.value:
+               quota_used.__add__(5)
+               gevent.sleep(5)
             
             # Kill the job when we're out.
             logging.error('Job killed -- out of time.')

@@ -1,3 +1,5 @@
 pika
 python-prctl
 boto>=2.6
+pyyaml
+kazoo
