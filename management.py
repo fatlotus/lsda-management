@@ -124,6 +124,7 @@ class AMQPLoggingHandler(logging.Handler):
       self.exchange = exchange_name
       self.disable = False
       self.task_id = None
+      self.branch_name = None
       self.my_uuid = str(uuid.uuid4())
       self.setFormatter(logging.Formatter(
          "%(asctime)s [%(levelname)-8s] %(message)s"
@@ -145,7 +146,7 @@ class AMQPLoggingHandler(logging.Handler):
          self.amqp_channel.basic_publish(
             exchange = self.exchange,
             routing_key = "stderr.{0}".format(self.task_id),
-         
+            
             # Pack the current worker and task IDs into the message.
             body = json.dumps(message)
          )
@@ -155,7 +156,12 @@ class AMQPLoggingHandler(logging.Handler):
       Closes the other end of this pipe.
       """
       
-      self.emit_amqp(dict(type = 'close'))
+      self.emit_amqp(dict(
+         worker_uuid = self.my_uuid,
+         task_id = self.task_id,
+         branch_name = self.branch_name,
+         type = 'close'
+      ))
    
    def emit_unformatted(self, message, level = None):
       """
@@ -179,6 +185,7 @@ class AMQPLoggingHandler(logging.Handler):
             type = 'data',
             worker_uuid = self.my_uuid,
             task_id = self.task_id,
+            branch_name = self.branch_name,
             message = message,
             level = level
          ))
@@ -316,6 +323,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                
                # Associate logs with this task.
                self.logs_handler.task_id = task_id
+               self.logs_handler.branch_name = branch
                
                try:
                   with Interruptable("Processing AMQP task") as still_working:
@@ -343,6 +351,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
                   # Clean up logging.
                   self.logs_handler.task_id = None
+                  self.logs_handler.branch_name = None
                
                # Log completion.
                logging.info('Completed task_id={0!r}'.format(task_id))
