@@ -39,8 +39,11 @@ for branch in branches_to_run:
 # Track completed branches.
 completed = set()
 
-def handle_end_of_submission(my_commit):
-   if my_commit in completed:
+def handle_end_of_submission(task_id):
+   """
+   Inform the user on unexpected connection loss about their job.
+   """
+   if task_id in completed:
       return
    
    conn = boto.ses.connect_to_region("us-east-1")
@@ -51,27 +54,29 @@ def handle_end_of_submission(my_commit):
 Hello there!
 
 It appears that a recent run of yours died unexpectedly. If you want to
-keep watching the output, visit {{LINK_URL}}. Note that if you make another
+keep watching the output, visit the link below. Note that if you make another
 submission this one will be terminated.
 
-If anything seems fishy please don't hesitate to contact me.
+http://ml-submissions.s3-website-us-east-1.amazonaws.com/results/{task_id}
+
+If anything seems fishy, please don't hesitate to contact me.
 
 All the best,
 -J
-""",
+""".format(**locals()),
       ["jarcher@uchicago.edu"]
    )
 
 # Submit each commit serially.
 for commit in commits_to_run:
    
-   # Notify the user if the connection breaks early.
-   atexit.register(handle_end_of_submission, commit)
-   
    # Create the existing task to submit.
    task_id = uuid.uuid4()
    jobs = ['controller', 'engine']
-
+   
+   # Notify the user if the connection breaks early.
+   atexit.register(handle_end_of_submission, task_id)
+   
    # Publish each job in this task.
    for job in jobs:
       channel.basic_publish(
@@ -116,4 +121,4 @@ for commit in commits_to_run:
       channel.stop_consuming()
    
    # Track this commit as completed.
-   completed.add(commit)
+   completed.add(task_id)
