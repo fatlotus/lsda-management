@@ -60,10 +60,13 @@ def main():
             # Update the actual quota value.
             if limit != 0:
                if cnetid in already_tracked:
+                  print("SET: {0!r} to {1!r}".format(cnetid_path, limit))
                   zookeeper.set(cnetid_path, str(limit))
                else:
+                  print("CRT: {0!r} to {1!r}".format(cnetid_path, limit))
                   zookeeper.create(cnetid_path, str(limit))
             else:
+               print("DEL: {0!r}".format(cnetid_path, limit))
                zookeeper.delete(cnetid_path)
             
          except KazooException, exc:
