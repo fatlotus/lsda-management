@@ -477,6 +477,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             except KazooException:
                pass
             
+            # Print a link to the results of this run.
+            self.logs_handler.emit_unformatted((
+               "Visit http://nbviewer.ipython.org/url/ml-submissions.s3-websit"+
+               "e-us-east-1.amazonaws.com/results/{task_id}.ipynb to see the r"+
+               "esults of this run.").format(**locals()))
+            
             # Inform the user how much time was consumed.
             total_time = self.zookeeper.Counter('/usedtime/{0}'.format(task_id),
                            default = 0.0)
