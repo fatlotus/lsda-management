@@ -34,15 +34,21 @@ ALLOWED_MODULES = [
    "IPython.parallel",
    "IPython.parallel.apps.ipengineapp",
    "IPython.kernel.zmq.iostream",
+   "IPython.kernel.inprocess.ipkernel",
    "IPython.core.completerlib",
    "IPython.utils.rlineimpl",
    "apport.fileutils",
    "_strptime",
-   "xml.sax.expatreader"
+   "xml.sax.expatreader",
+   "zmq.utils.garbage",
+   "runipy.main"
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
 u"".encode('utf-8').decode('utf-8').encode('ascii').decode('ascii')
+
+# Allow the use of the "string-escape" encoding.
+b"".decode('string-escape')
 
 # Decide what user to run this script as.
 user_id = pwd.getpwnam('sandbox').pw_uid
@@ -130,6 +136,39 @@ if username == 'backbone':
    # Pre-load boto.
    ALLOWED_MODULES += ['boto', 'boto.s3.connection']
 
+# Rewrite main.ipynb to include main.py.
+if os.path.exists('main.py'):
+   
+   # Read existing code in main.py.
+   code_in_main = (['# main.py', ''] +
+     open('main.py', 'r').read().split("\n"))
+   
+   # Open existing notebook.
+   existing_content = json.load(open('main.ipynb', 'r'))
+   cells = existing_content['worksheets'][0]['cells']
+   
+   # Add the new cell to the top of the notebook.
+   cells.insert(0, {
+      'cell_type': 'code',
+      'collapsed': False,
+      'input': code_in_main,
+      'language': 'python',
+      'metadata': {},
+      'outputs': []
+   })
+   
+   # Save the results back to the notebook.
+   json.dump(existing_content, open('main.ipynb', 'w'))
+
+# Allow modification of main.ipynb.
+os.chmod('main.ipynb', 0666)
+
+# Knock out the KernelManager.
+import IPython.kernel
+from IPython.kernel.inprocess.manager import InProcessKernelManager
+
+IPython.kernel.KernelManager = InProcessKernelManager
+
 # Require the imported modules as late as possible.
 os.chdir('/') # <- beware of os.getcwd() calls in initializers!
 for module in ALLOWED_MODULES:
@@ -154,12 +193,10 @@ sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 0)
 
 if sys.argv[1] == 'main':
-   # Run "main.py"
-   
-   sys.argv = ['main.py']
-   
-   import runpy
-   runpy.run_module('main', run_name = '__main__')
+   # Use ipynb to run the default IPython notebook.
+   sys.argv = ['runipy', '-o', 'main.ipynb']
+   import runipy.main
+   runipy.main.main()
 
 elif sys.argv[1] == 'ipengine':
    # Run "ipengine"

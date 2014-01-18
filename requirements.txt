@@ -4,3 +4,4 @@ kazoo
 pyzmq
 ipython
 boto>=2.6
+runipy
