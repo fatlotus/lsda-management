@@ -56,7 +56,8 @@ prefix = os.getcwd()
 connect_to_ip = None
 
 # Determine if the user running this script is an administrator.
-username = sys.argv[2]
+task_id = sys.argv[2]
+username = sys.argv[3]
 
 # Limit the number of processes in the sandbox.
 resource.setrlimit(resource.RLIMIT_NOFILE, (1024, 1024))
@@ -110,6 +111,20 @@ if os.fork() != 0:
       # Kill all dangling processes.
       subprocess.call(['/usr/bin/killall', '-u', 'sandbox', '-9', '-w'])
       
+      if sys.argv[1] == 'main':
+         
+         # Upload the resulting ipynb file to S3.
+         import boto.s3
+         connection = boto.connect_s3()
+         bucket = connection.get_bucket('ml-submissions')
+         key = bucket.new_key('results/' + task_id + '.ipynb')
+         
+         # Upload the resulting notebook.
+         try:
+            key.set_contents_from_filename('main.ipynb')
+         except OSError:
+            pass
+      
       # Delete the sandbox.
       subprocess.call(['/bin/rm', '-rf', prefix])
       
@@ -132,9 +147,6 @@ if connect_to_ip:
 # Allow the backbone to connect to the controller.
 if username == 'backbone':
    subprocess.call(['/sbin/iptables', '-I', 'OUTPUT', '-j', 'ACCEPT'])
-   
-   # Pre-load boto.
-   ALLOWED_MODULES += ['boto', 'boto.s3.connection']
 
 # Rewrite main.ipynb to include main.py.
 if os.path.exists('main.py'):

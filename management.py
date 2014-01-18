@@ -537,7 +537,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       try:
          # Trigger main IPython job.
          main_job = subprocess.Popen(
-           ["/usr/bin/sudo", "/worker/sandbox.py"] + command + [username],
+           ["/usr/bin/sudo", "/worker/sandbox.py"] + command +
+             [task_id, username],
            
            cwd = code_directory,
            stdout = subprocess.PIPE,
