@@ -557,7 +557,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          def drain_quarters():
             # Continue taking time in five-second increments.
             while quota_used.value < quota_limit.value:
-               quota_used.__add__(5)
+               quota_used.__add__(5.0)
                gevent.sleep(5)
             
             # Kill the job when we're out.
