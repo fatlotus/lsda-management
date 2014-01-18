@@ -48,7 +48,7 @@ def handle_end_of_submission(task_id):
    
    conn = boto.ses.connect_to_region("us-east-1")
    conn.send_email(
-      "\"Cylon Jeremy\" <jarcher@uchicago.edu>",
+      "\"Bob the Build Bot\" <jarcher@uchicago.edu>",
       "AUTO: Connection Lost",
       """\
 Hello there!
