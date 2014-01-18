@@ -57,7 +57,7 @@ It appears that a recent run of yours died unexpectedly. If you want to
 keep watching the output, visit the link below. Note that if you make another
 submission this one will be terminated.
 
-http://ml-submissions.s3-website-us-east-1.amazonaws.com/results/{task_id}
+http://nbviewer.ipython.org/url/ml-submissions.s3-website-us-east-1.amazonaws.com/results/{task_id}.ipynb
 
 If anything seems fishy, please don't hesitate to contact me.
 
