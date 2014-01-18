@@ -147,6 +147,8 @@ if connect_to_ip:
 # Allow the backbone to connect to the controller.
 if username == 'backbone':
    subprocess.call(['/sbin/iptables', '-I', 'OUTPUT', '-j', 'ACCEPT'])
+   
+   ALLOWED_MODULES += ['boto', 'boto.s3.connection']
 
 # Rewrite main.ipynb to include main.py.
 if os.path.exists('main.py'):
