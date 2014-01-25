@@ -581,15 +581,19 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          # Record how long this took.
          total_time += finish_time - start_time
          
-         # Finish remaining subtasks
-         drain_quarters.kill()
-         
       finally:
          # Clean up main job.
          try:
             main_job.kill()
          except OSError:
             pass
+         
+         # Finish remaining subtasks.
+         try:    drain_quarters.kill()
+         except: pass
+         
+         try:    stderr_copier.kill()
+         except: pass
 
 def main():
    # Configure logging
