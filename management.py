@@ -125,6 +125,7 @@ class AMQPLoggingHandler(logging.Handler):
       self.disable = False
       self.task_id = None
       self.branch_name = None
+      self.task_type = None
       self.my_uuid = str(uuid.uuid4())
       self.setFormatter(logging.Formatter(
          "%(asctime)s [%(levelname)-8s] %(message)s"
@@ -160,6 +161,7 @@ class AMQPLoggingHandler(logging.Handler):
          worker_uuid = self.my_uuid,
          task_id = self.task_id,
          branch_name = self.branch_name,
+         task_type = self.task_type,
          type = 'close'
       ))
    
@@ -186,8 +188,9 @@ class AMQPLoggingHandler(logging.Handler):
             worker_uuid = self.my_uuid,
             task_id = self.task_id,
             branch_name = self.branch_name,
+            task_type = self.task_type,
             message = message,
-            level = level
+            level = level,
          ))
          
       except pika.exceptions.ChannelClosed:
@@ -324,6 +327,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                # Associate logs with this task.
                self.logs_handler.task_id = task_id
                self.logs_handler.branch_name = branch
+               self.logs_handler.task_type = kind
                
                try:
                   with Interruptable("Processing AMQP task") as still_working:

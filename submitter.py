@@ -105,7 +105,7 @@ for commit in commits_to_run:
       if unpacked['type'] == 'close':
          raise DoneException
       elif unpacked['level'] >= logging.WARN:
-         sys.stderr.write(unpacked['message'] + "\n")
+         sys.stderr.write("{task_type:<20} {message}\n".format(**unpacked))
          sys.stderr.flush()
    
    # Inform the user that execution has not yet started.
