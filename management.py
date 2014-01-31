@@ -468,6 +468,17 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             finish_job()
               # Generally this is a sign of a bad task -- but dragons remain.
          
+         @gevent.spawn
+         def copy_output_from_controller():
+            # Copy output from ipcontroller, as well.
+            
+            while True:
+               line = controller_job.stderr.readline()
+               if line == '':
+                  break
+               self.logs_handler.emit_unformatted("ipcontroller says {:}"
+                  .format(line.strip()))
+         
          try:
             # Run the main script in the sandbox.
             self._run_in_sandbox(task_id, branch, ["main"])
