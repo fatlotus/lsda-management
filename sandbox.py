@@ -33,6 +33,7 @@ ALLOWED_MODULES = [
    "IPython",
    "IPython.parallel",
    "IPython.parallel.apps.ipengineapp",
+   "IPython.parallel.client.magics",
    "IPython.kernel.zmq.iostream",
    "IPython.kernel.inprocess.ipkernel",
    "IPython.core.completerlib",
