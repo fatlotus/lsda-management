@@ -47,8 +47,6 @@ ALLOWED_MODULES = [
    "boto.s3.connection",
    "DAL",
    "czipfile",
-   "scipy",
-   "scipy.misc",
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
@@ -179,6 +177,14 @@ IPython.kernel.KernelManager = InProcessKernelManager
 
 # Ensure that we also import the DAL.
 sys.path.append("/worker/dal")
+
+# Make sure we can display a PNG with PIL.
+import scipy.misc
+import numpy
+import StringIO
+
+img = scipy.misc.toimage(numpy.array([[0]]))
+img.save(StringIO.StringIO(), format="PNG")
 
 # Require the imported modules as late as possible.
 os.chdir('/') # <- beware of os.getcwd() calls in initializers!
