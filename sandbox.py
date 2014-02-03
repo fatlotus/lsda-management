@@ -52,6 +52,9 @@ ALLOWED_MODULES = [
 # Allow people to use UTF-8 and ASCII codecs in this script.
 u"".encode('utf-8').decode('utf-8').encode('ascii').decode('ascii')
 
+# Allow the idna encoding
+u"".encode('idna').decode('idna')
+
 # Allow the use of the "string-escape" encoding.
 b"".decode('string-escape')
 
