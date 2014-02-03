@@ -42,7 +42,10 @@ ALLOWED_MODULES = [
    "_strptime",
    "xml.sax.expatreader",
    "zmq.utils.garbage",
-   "runipy.main"
+   "runipy.main",
+   "boto",
+   "boto.s3.connection",
+   "DAL",
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
@@ -86,6 +89,9 @@ try:
    os.makedirs(os.path.join('home', MAGIC_JSON_FILES), 0777)
    os.chown(os.path.join('home', MAGIC_JSON_FILES), user_id, user_id)
 
+   # Add the DAL configuration file to the sandbox.
+   shutil.copyfile('/worker/dalconfig.json', 'dalconfig.json')
+
    for item in os.listdir(os.path.join(HOME_DIR, MAGIC_JSON_FILES)):
       src = os.path.join(HOME_DIR, MAGIC_JSON_FILES, item)
       dst = os.path.join('home', MAGIC_JSON_FILES, item)
@@ -128,28 +134,9 @@ if os.fork() != 0:
       
       # Delete the sandbox.
       subprocess.call(['/bin/rm', '-rf', prefix])
-      
-      if connect_to_ip:
-         subprocess.call(['/sbin/iptables', '-D', 'OUTPUT', '-p', 'tcp',
-           '-d', connect_to_ip, '-j', 'ACCEPT', '--dport', '1024:65535'])
-      
-      # Allow backbone submissions through.
-      if username == 'backbone':
-         subprocess.call(['/sbin/iptables', '-D', 'OUTPUT', '-j', 'ACCEPT'])
    
    os.wait()
    sys.exit(0)
-
-# Only allow connections to the controller.
-if connect_to_ip:
-   subprocess.call(['/sbin/iptables', '-I', 'OUTPUT', '-p', 'tcp',
-     '-d', connect_to_ip, '-j', 'ACCEPT', '--dport', '1024:65535'])
-
-# Allow the backbone to connect to the controller.
-if username == 'backbone':
-   subprocess.call(['/sbin/iptables', '-I', 'OUTPUT', '-j', 'ACCEPT'])
-   
-   ALLOWED_MODULES += ['boto', 'boto.s3.connection']
 
 # Rewrite main.ipynb to include main.py.
 if os.path.exists('main.py'):
@@ -183,6 +170,9 @@ import IPython.kernel
 from IPython.kernel.inprocess.manager import InProcessKernelManager
 
 IPython.kernel.KernelManager = InProcessKernelManager
+
+# Ensure that we also import the DAL.
+sys.path.append("/worker/dal")
 
 # Require the imported modules as late as possible.
 os.chdir('/') # <- beware of os.getcwd() calls in initializers!
