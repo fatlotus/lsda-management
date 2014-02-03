@@ -48,6 +48,7 @@ ALLOWED_MODULES = [
    "DAL",
    "czipfile",
    "scipy",
+   "scipy.misc",
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
