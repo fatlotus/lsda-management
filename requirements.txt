@@ -6,3 +6,4 @@ ipython
 boto>=2.6
 runipy
 numpy
+czipfile

@@ -46,6 +46,7 @@ ALLOWED_MODULES = [
    "boto",
    "boto.s3.connection",
    "DAL",
+   "czipfile",
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
