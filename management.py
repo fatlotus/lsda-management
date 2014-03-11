@@ -443,7 +443,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       gevent.sleep(1)
       
       # Start the local IPython controller.
-      command = ["/usr/local/bin/ipcontroller", "--init", "--ip=*"]
+      command = ["/usr/bin/env", "ipcontroller", "--init", "--ip=*"]
       
       # Record the arguments.
       logging.info("Starting ipcontroller cmd={0!r}".format(command))
@@ -548,17 +548,17 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       )
       
       # Checking out the proper source code.
-      subprocess.call(["/usr/bin/git", "clone", "--quiet",
+      subprocess.call(["/usr/bin/env", "git", "clone", "--quiet",
         git_url, code_directory])
       
       # Checking out the proper source code.
-      subprocess.call(["/usr/bin/git", "checkout", branch],
+      subprocess.call(["/usr/bin/env", "git", "checkout", branch],
         cwd = code_directory)
       
       try:
          # Trigger main IPython job.
          main_job = subprocess.Popen(
-           ["/usr/bin/sudo", "/worker/sandbox.py"] + command +
+           ["/usr/bin/env", "sudo", "/worker/sandbox.py"] + command +
              [task_id, username],
            
            cwd = code_directory,
