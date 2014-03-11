@@ -47,6 +47,7 @@ ALLOWED_MODULES = [
    "boto.s3.connection",
    "DAL",
    "czipfile",
+   "leargist",
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
@@ -171,7 +172,7 @@ os.chmod('main.ipynb', 0666)
 
 # Knock out the KernelManager.
 import IPython.kernel
-from IPython.kernel.inprocess.manager import InProcessKernelManager
+from IPython.kernel.inprocess import InProcessKernelManager
 
 IPython.kernel.KernelManager = InProcessKernelManager
 

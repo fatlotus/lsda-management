@@ -1,10 +1,11 @@
-pika
-gevent
+pika==0.9.13
+gevent==1.0
 kazoo
-pyzmq
+pyzmq==14.0.1
 ipython>=1.2.1
 boto>=2.6
 runipy
 numpy
 czipfile
 scipy
+Cython
