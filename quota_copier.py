@@ -16,6 +16,9 @@ from kazoo.exceptions import KazooException
 import argparse
 import yaml
 
+# Define scaling factors for units.
+UNITS = {"hour": 3600, "minute": 60, "second": 1}
+
 def main():
    # Prepare default configuration options.
    parser = argparse.ArgumentParser(
@@ -55,6 +58,14 @@ def main():
          cnetid_path = ('/quota_limit/{resource}/{cnetid}'.format(**locals())
                          .encode('utf-8'))
          limit = limits.get(cnetid, 0)
+         
+         # Scale resource values by unit.
+         if " " in limit:
+            value, unit = limit.split(" ")
+            if unit.endswith("s"):
+               unit = unit[:-1]
+            
+            value = float(value) * UNITS[unit]
          
          try:
             # Update the actual quota value.
