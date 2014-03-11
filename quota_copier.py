@@ -60,12 +60,12 @@ def main():
          limit = limits.get(cnetid, 0)
          
          # Scale resource values by unit.
-         if " " in limit:
+         if " " in str(limit):
             value, unit = limit.split(" ")
             if unit.endswith("s"):
                unit = unit[:-1]
             
-            value = float(value) * UNITS[unit]
+            limit = float(value) * UNITS[unit]
          
          try:
             # Update the actual quota value.
