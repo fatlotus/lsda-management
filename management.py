@@ -27,7 +27,7 @@ import pika
 
 # Finally, import the stdlib.
 import re, socket, argparse, sys, logging, time, uuid, json, shutil, tempfile
-import base64, os
+import base64, os, urllib
 from functools import wraps, partial
 
 def forever(func):
@@ -127,6 +127,8 @@ class AMQPLoggingHandler(logging.Handler):
       self.branch_name = None
       self.task_type = None
       self.my_uuid = str(uuid.uuid4())
+      self.ip_address = urllib.urlopen("http://169.254.169.254/latest/"
+                                       "meta-data/public-ipv4").read()
       self.setFormatter(logging.Formatter(
          "%(asctime)s [%(levelname)-8s] %(message)s"
       ))
@@ -162,6 +164,7 @@ class AMQPLoggingHandler(logging.Handler):
          task_id = self.task_id,
          branch_name = self.branch_name,
          task_type = self.task_type,
+         ip_address = self.ip_address,
          type = 'close'
       ))
    
@@ -189,6 +192,7 @@ class AMQPLoggingHandler(logging.Handler):
             task_id = self.task_id,
             branch_name = self.branch_name,
             task_type = self.task_type,
+            ip_address = self.ip_address,
             message = message,
             level = level,
          ))
