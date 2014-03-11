@@ -2,7 +2,7 @@ pika
 gevent
 kazoo
 pyzmq
-ipython
+ipython>=1.2.1
 boto>=2.6
 runipy
 numpy
