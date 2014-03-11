@@ -72,7 +72,7 @@ for commit in commits_to_run:
    
    # Create the existing task to submit.
    task_id = uuid.uuid4()
-   jobs = ['controller', 'engine']
+   jobs = ['controller', 'engine', 'engine', 'engine', 'engine', 'engine']
    
    # Notify the user if the connection breaks early.
    atexit.register(handle_end_of_submission, task_id)
