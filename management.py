@@ -366,7 +366,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                
                # Mark this task as having finished. This write is where atomic
                # updates should occur.
-               self.zookeeper.create('/done/{0}'.format(task_id),
+               self.zookeeper.create('/done/{0}'.format(task_id), "complete",
                  makepath = True)
             
             else:
@@ -394,8 +394,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             # Retrieve the current controller from ZooKeeper, and trigger an
             # interrupt when the current URL changes.
             
-            controller_info = self.zookeeper.get('/{0}'.format(task_id),
-              partial(gevent.spawn, has_controller.interrupt))[0]
+            controller_info = self.zookeeper.get('/controller/{}'.format
+              (task_id), partial(gevent.spawn, has_controller.interrupt))[0]
             
          except NoNodeError:
             has_controller.interrupt()
@@ -412,7 +412,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                no_controller.interrupt()
          
          # Ensure that the given task exists before continuing.
-         if not self.zookeeper.exists('/{0}'.format(task_id),
+         if not self.zookeeper.exists('/controller/{0}'.format(task_id),
                   partial(gevent.spawn, inner)):
             
             wait_forever()
@@ -465,8 +465,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          
          # Notify ZooKeeper that we've started.
          try:
-            self.zookeeper.create('/{0}'.format(task_id), ephemeral = True,
-               value = controller_info)
+            self.zookeeper.create('/controller/{0}'.format(task_id),
+              ephemeral = True, value = controller_info, makepath = True)
          except NodeExistsError:
             logging.warn('Potential race condition in task_id or done/task_id.')
             finish_job()
@@ -492,7 +492,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             finish_job()
          finally:
             try:
-               self.zookeeper.delete('/{0}'.format(task_id))
+               self.zookeeper.delete('/controller/{0}'.format(task_id))
             except KazooException:
                pass
             
