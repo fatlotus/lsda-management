@@ -117,7 +117,8 @@ except OSError:
    pass
 
 # Spawn a cleanup daemon.
-if os.fork() != 0:
+child = os.fork()
+if child != 0:
    @atexit.register
    def cleanup_handler():
       # Kill all dangling processes.
