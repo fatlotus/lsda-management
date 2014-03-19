@@ -261,6 +261,13 @@ class ZooKeeperAgent(object):
          trigger_on_states(connected.interrupt, ( 'SUSPENDED', 'LOST' ))
             # Wake up If we reach the given state.
          
+         # Mark ourselves as visible in ZooKeeper.
+         try:
+            self.zookeeper.create("/nodes/{}".format(_lookup_ip_address()),
+              ephemeral = True, makepath = True)
+         except NodeExistsError:
+            pass
+         
          self._on_connected_to_zookeeper()
             # Process events until this occurs.
    
@@ -304,13 +311,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       This function manages the daemon to pull tasks from AMQP.
       """
       
-      # Mark ourselves as visible in ZooKeeper.
-      try:
-         self.zookeeper.create("/nodes/{}".format(_lookup_ip_address()),
-           sequence = True, ephemeral = True, makepath = True)
-      except NodeExistsError:
-         pass
-      
       # Ensure that we don't busy wait.
       gevent.sleep(1)
       
@@ -323,9 +323,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       if method_frame:
          # Parse the incoming message.
          kind, owner, task_id, sha1 = body.split(':', 3)
-         
-         # Decode the branch name to run.
-         branch = base64.b64decode(base64_branch)
          
          with Interruptable("AMQP Task available") as task_available:
             
