@@ -13,7 +13,7 @@
 from gevent import monkey; monkey.patch_all()
 from gevent.event import Event
 from gevent.coros import Semaphore
-from gevent import subprocess
+from gevent import subprocess, local
 import greenlet, gevent
 
 # Import the pure-Python ZooKeeper implementation.
@@ -64,20 +64,23 @@ class Interruptable(object):
    function.
    """
    
-   def __init__(self, description=None):
+   def __init__(self, description=None, owner=None):
       self.exception = DeepBreakException()
       self.active = True
       self.thread = gevent.getcurrent()
       self.description = description
+      self.owner = owner
    
    def __enter__(self):
       self.active = True
-      logging.info("Enter state={0!r}".format(self.description))
+      if self.owner:
+         self.owner.enter_state(self)
       return self
    
    def __exit__(self, kind, instance, traceback):
       self.active = False
-      logging.info("Exit state={0!r}".format(self.description))
+      if self.owner:
+         self.owner.exit_state(self)
       return instance is self.exception
    
    def interrupt(self, *vargs, **dargs):
@@ -232,7 +235,35 @@ class ZooKeeperAgent(object):
       """
       
       self.zookeeper = zookeeper
+      self.state_stack = []
+      self.agent_identifier = "/nodes/{}".format(_get_public_ip_address())
+      
       self.thread = gevent.spawn(self._on_currently_running)
+   
+   def update_state(self):
+      """
+      Tells ZooKeeper of our current state, if we are connected.
+      """
+      
+      self.zookeeper.set(self.agent_identifier, ":".join(self.state_stack))
+   
+   def enter_state(self, state):
+      """
+      Tracks when this Agent enters a given state.
+      """
+      
+      logging.info("Enter state={!r}".format(state.description))
+      self.state_stack.append(state.description)
+      self.update_state()
+   
+   def exit_state(self, state):
+      """
+      Tracks when this Agent leaves a given state.
+      """
+      
+      logging.info("Exit state={!r}".format(state.description))
+      self.state_stack.pop()
+      self.update_state()
    
    @forever
    def _on_currently_running(self):
@@ -265,16 +296,16 @@ class ZooKeeperAgent(object):
             wait_forever()
                # Block until this occurs.
       
-      with Interruptable("Connected to ZooKeeper") as connected:
+      # Ensure that we exist in ZooKeeper first.
+      try:
+         self.zookeeper.create(self.agent_identifier,
+           ephemeral = True, makepath = True)
+      except NodeExistsError:
+         pass
+      
+      with Interruptable("Connected to ZooKeeper", self) as connected:
          trigger_on_states(connected.interrupt, ( 'SUSPENDED', 'LOST' ))
             # Wake up If we reach the given state.
-         
-         # Mark ourselves as visible in ZooKeeper.
-         try:
-            self.zookeeper.create("/nodes/{}".format(_get_public_ip_address()),
-              ephemeral = True, makepath = True)
-         except NodeExistsError:
-            pass
          
          self._on_connected_to_zookeeper()
             # Process events until this occurs.
@@ -336,7 +367,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             kind, task_id, sha1 = body.split(':', 3)
             owner = "nobody"
          
-         with Interruptable("AMQP Task available") as task_available:
+         with Interruptable("AMQP Task available", self) as task_available:
             
             # Ensure that this task has not already finished.
             if not self.zookeeper.exists('/done/{0}'.format(task_id),
@@ -354,7 +385,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                self.logs_handler.task_type = kind
                
                try:
-                  with Interruptable("Processing AMQP task") as still_working:
+                  with Interruptable("Processing AMQP task", self) as working:
                      
                      try:
                         # Launch the correct type of worker.
@@ -364,7 +395,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                         
                         elif kind == 'controller':
                            self._has_controller_task_to_perform(
-                             task_id, owner, sha1, still_working.interrupt)
+                             task_id, owner, sha1, working.interrupt)
                         
                         else:
                            logging.warn("Received task of unknown type {0!r}"
@@ -412,7 +443,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       # that connection break, the ZooKeeperAgent superclass will inform us by
       # raising a +DisconnectedFromZooKeeper+ exception.
       
-      with Interruptable("Controller is ready") as has_controller:
+      with Interruptable("Controller is ready", self) as has_controller:
          try:
             # Retrieve the current controller from ZooKeeper, and trigger an
             # interrupt when the current URL changes.
@@ -427,7 +458,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          self._has_controller(task_id, controller_info, owner, sha1)
            # Trigger the next level of processing.
       
-      with Interruptable("No controller ready") as no_controller:
+      with Interruptable("No controller ready", self) as no_controller:
          
          # Ensure that we only wake up when ready.
          def inner(exists):
