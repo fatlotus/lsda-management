@@ -322,7 +322,11 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       # Mask on an empty queue.
       if method_frame:
          # Parse the incoming message.
-         kind, owner, task_id, sha1 = body.split(':', 3)
+         try:
+            kind, owner, task_id, sha1 = body.split(':', 3)
+         except ValueError:
+            kind, task_id, sha1 = body.split(':', 3)
+            owner = "nobody"
          
          with Interruptable("AMQP Task available") as task_available:
             
