@@ -29,6 +29,7 @@ import pika
 import re, socket, argparse, sys, logging, time, uuid, json, shutil, tempfile
 import base64, os, urllib
 from functools import wraps, partial
+import os.path
 
 def forever(func):
    """
@@ -537,6 +538,28 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                self.logs_handler.emit_unformatted("ipcontroller says {:}"
                   .format(line.strip()))
          
+         @gevent.spawn
+         def copy_notebook_to_s3():
+            previous_time = 0
+            
+            while True:
+               
+               # Ensure that we've actually changed since the last time.
+               if os.path.getmtime("main.ipynb") > previous_time:
+                  
+                  # Upload the ipynb file to S3.
+                  import boto.s3
+                  connection = boto.connect_s3()
+                  bucket = connection.get_bucket('ml-submissions')
+                  key = bucket.new_key('results/' + task_id + '.ipynb')
+                  
+                  previous_time = os.path.getmtime("main.ipynb")
+                  
+                  # Upload the resulting notebook.
+                  key.set_contents_from_filename('main.ipynb')
+               
+               gevent.sleep(30)
+         
          try:
             # Run the main script in the sandbox.
             self._run_in_sandbox(task_id, owner, sha1, ["main"])
@@ -549,6 +572,9 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                self.zookeeper.delete('/controller/{0}'.format(task_id))
             except KazooException:
                pass
+            
+            # Stop the notebook copier.
+            copy_notebook_to_s3.kill()
             
             # Print a link to the results of this run.
             self.logs_handler.emit_unformatted((
