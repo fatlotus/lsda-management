@@ -96,7 +96,7 @@ def wait_forever():
    while True:
       gevent.sleep(60)
 
-def _lookup_ip_address():
+def _get_ip_address():
    """
    Determines the current instance IP address by attempting to connect to
    Google Public DNS.
@@ -109,6 +109,14 @@ def _lookup_ip_address():
       return connection.getsockname()[0]
    finally:
       connection.close()
+
+def _get_public_ip_address():
+   """
+   Determines the publicly-routable instance IP address using Amazon magics.
+   """
+   
+   return urllib.urlopen("http://169.254.169.254/latest/"
+                         "meta-data/public-ipv4").read()
 
 class AMQPLoggingHandler(logging.Handler):
    """
@@ -128,7 +136,7 @@ class AMQPLoggingHandler(logging.Handler):
       self.sha1 = None
       self.task_type = None
       self.my_uuid = str(uuid.uuid4())
-      self.ip_address = _lookup_ip_address()
+      self.ip_address = _get_public_ip_address()
       self.setFormatter(logging.Formatter(
          "%(asctime)s [%(levelname)-8s] %(message)s"
       ))
@@ -263,7 +271,7 @@ class ZooKeeperAgent(object):
          
          # Mark ourselves as visible in ZooKeeper.
          try:
-            self.zookeeper.create("/nodes/{}".format(_lookup_ip_address()),
+            self.zookeeper.create("/nodes/{}".format(_get_public_ip_address()),
               ephemeral = True, makepath = True)
          except NodeExistsError:
             pass
