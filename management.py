@@ -124,11 +124,11 @@ class AMQPLoggingHandler(logging.Handler):
       self.exchange = exchange_name
       self.disable = False
       self.task_id = None
-      self.branch_name = None
+      self.owner = None
+      self.sha1 = None
       self.task_type = None
       self.my_uuid = str(uuid.uuid4())
-      self.ip_address = urllib.urlopen("http://169.254.169.254/latest/"
-                                       "meta-data/public-ipv4").read()
+      self.ip_address = _lookup_ip_address()
       self.setFormatter(logging.Formatter(
          "%(asctime)s [%(levelname)-8s] %(message)s"
       ))
@@ -162,7 +162,8 @@ class AMQPLoggingHandler(logging.Handler):
       self.emit_amqp(dict(
          worker_uuid = self.my_uuid,
          task_id = self.task_id,
-         branch_name = self.branch_name,
+         owner = self.owner,
+         sha1 = self.sha1,
          task_type = self.task_type,
          ip_address = self.ip_address,
          type = 'close'
@@ -190,7 +191,8 @@ class AMQPLoggingHandler(logging.Handler):
             type = 'data',
             worker_uuid = self.my_uuid,
             task_id = self.task_id,
-            branch_name = self.branch_name,
+            owner = self.owner,
+            sha1 = self.sha1,
             task_type = self.task_type,
             ip_address = self.ip_address,
             message = message,
@@ -302,6 +304,13 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       This function manages the daemon to pull tasks from AMQP.
       """
       
+      # Mark ourselves as visible in ZooKeeper.
+      try:
+         self.zookeeper.create("/nodes/{}".format(_lookup_ip_address()),
+           sequence = True, ephemeral = True, makepath = True)
+      except NodeExistsError:
+         pass
+      
       # Ensure that we don't busy wait.
       gevent.sleep(1)
       
@@ -313,7 +322,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       # Mask on an empty queue.
       if method_frame:
          # Parse the incoming message.
-         kind, task_id, base64_branch = body.split(':', 2)
+         kind, owner, task_id, sha1 = body.split(':', 3)
          
          # Decode the branch name to run.
          branch = base64.b64decode(base64_branch)
@@ -325,12 +334,14 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                      partial(gevent.spawn, task_available.interrupt)):
                
                # Log the start of execution.
-               logging.info('Processing task={0!r}, kind={1!r}, branch={2!r}'.
-                 format(task_id, kind, branch))
+               logging.info(
+                 'Processing task={!r}, kind={!r}, owner={!r}, sha1={!r}'.
+                 format(task_id, kind, owner, sha1))
                
                # Associate logs with this task.
                self.logs_handler.task_id = task_id
-               self.logs_handler.branch_name = branch
+               self.logs_handler.sha1 = sha1
+               self.logs_handler.owner = owner
                self.logs_handler.task_type = kind
                
                try:
@@ -339,11 +350,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                      try:
                         # Launch the correct type of worker.
                         if kind == 'engine':
-                           self._has_engine_task_to_perform(task_id, branch)
+                           self._has_engine_task_to_perform(
+                             task_id, owner, sha1)
                         
                         elif kind == 'controller':
                            self._has_controller_task_to_perform(
-                             task_id, still_working.interrupt, branch)
+                             task_id, owner, sha1, still_working.interrupt)
                         
                         else:
                            logging.warn("Received task of unknown type {0!r}"
@@ -359,6 +371,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
                   # Clean up logging.
                   self.logs_handler.task_id = None
+                  self.logs_handler.owner = None
+                  self.logs_handler.task_type = None
                   self.logs_handler.branch_name = None
                
                # Log completion.
@@ -380,7 +394,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             self.amqp_channel.basic_ack(method_frame.delivery_tag)
    
    @forever
-   def _has_engine_task_to_perform(self, task_id, branch):
+   def _has_engine_task_to_perform(self, task_id, owner, sha1):
       """
       This function manages the connection to ZooKeeper.
       """
@@ -401,7 +415,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             has_controller.interrupt()
               # If we couldn't find the controller, skip ahead.
          
-         self._has_controller(task_id, controller_info, branch)
+         self._has_controller(task_id, controller_info, owner, sha1)
            # Trigger the next level of processing.
       
       with Interruptable("No controller ready") as no_controller:
@@ -418,7 +432,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             wait_forever()
    
    @forever
-   def _has_controller(self, task_id, controller_info, branch):
+   def _has_controller(self, task_id, controller_info, owner, sha1):
       """
       This function ensures that the engine remains running while the
       controller is active.
@@ -435,10 +449,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          fp.write(controller_info)
       
       # Run the main script in the sandbox.
-      self._run_in_sandbox(task_id, branch, ["ipengine"])
+      self._run_in_sandbox(task_id, owner, sha1, ["ipengine"])
    
    @forever
-   def _has_controller_task_to_perform(self, task_id, finish_job, branch):
+   def _has_controller_task_to_perform(self, task_id, owner, sha1, finish_job):
       """
       This function manages the IPython controller subprocess.
       """
@@ -485,7 +499,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          
          try:
             # Run the main script in the sandbox.
-            self._run_in_sandbox(task_id, branch, ["main"])
+            self._run_in_sandbox(task_id, owner, sha1, ["main"])
             
             # Mark this controller as complete, which will deallocate the task
             # and expire the workers.
@@ -522,7 +536,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          except OSError:
             pass
    
-   def _run_in_sandbox(self, task_id, branch, command):
+   def _run_in_sandbox(self, task_id, owner, sha1, command):
       """
       Runs the given type of process inside a project sandbox.
       """
@@ -531,16 +545,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       code_directory = tempfile.mkdtemp()
       os.chmod(code_directory, 0755)
       
-      # Extract the CNetID for this request (for ACLs)
-      match = re.match(r'^submissions/([^/]+)/submit$', branch)
-      username = match.group(1) if match else ''
-      
       # Collect some per-task statistics.
       quota_used = self.zookeeper.Counter(
-                     '/quota_used/compute_time/{0}'.format(username),
+                     '/quota_used/compute_time/{0}'.format(owner),
                      default=0.0)
       quota_limit = self.zookeeper.Counter(
-                       '/quota_limit/compute_time/{0}'.format(username),
+                       '/quota_limit/compute_time/{0}'.format(owner),
                        default=0.0)
       total_time = self.zookeeper.Counter('/usedtime/{0}'.format(task_id),
                      default=0.0)
@@ -556,14 +566,14 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         git_url, code_directory])
       
       # Checking out the proper source code.
-      subprocess.call(["/usr/bin/env", "git", "checkout", branch],
+      subprocess.call(["/usr/bin/env", "git", "checkout", sha1],
         cwd = code_directory)
       
       try:
          # Trigger main IPython job.
          main_job = subprocess.Popen(
            ["/usr/bin/env", "sudo", "/worker/sandbox.py"] + command +
-             [task_id, username],
+             [task_id, owner],
            
            cwd = code_directory,
            stdout = subprocess.PIPE,
@@ -581,13 +591,14 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          # Count total per-user execution time.
          @gevent.spawn
          def drain_quarters():
-            # Continue taking time in five-second increments.
+            # Continue taking time in one-minute increments.
             while quota_used.value < quota_limit.value:
-               quota_used.__add__(5.0)
-               gevent.sleep(5)
+               quota_used.__add__(60.0)
+               gevent.sleep(60)
             
             # Kill the job when we're out.
-            logging.error('Job killed -- out of time.')
+            logging.error('Job killed -- out of time: used {} of {}'.format(
+                quota_used.value, quota_limit.value))
             main_job.kill()
             stderr_copier.kill()
          
