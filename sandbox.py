@@ -49,6 +49,9 @@ ALLOWED_MODULES = [
    "czipfile",
    "leargist",
    "matplotlib",
+   "heapq",
+   "itertools",
+   "collections",
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
