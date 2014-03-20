@@ -239,8 +239,10 @@ class ZooKeeperAgent(object):
       """
       
       self.zookeeper = zookeeper
-      self.state_stack = []
+      self.state_values = dict()
       self.agent_identifier = "/nodes/{}".format(_get_public_ip_address())
+      
+      self["state_stack"] = []
       
       self.thread = gevent.spawn(self._on_currently_running)
    
@@ -249,7 +251,28 @@ class ZooKeeperAgent(object):
       Tells ZooKeeper of our current state, if we are connected.
       """
       
-      self.zookeeper.set(self.agent_identifier, ":".join(self.state_stack))
+      self.zookeeper.set(self.agent_identifier, json.dumps(self.state_values))
+   
+   def __delitem__(self, name):
+       """
+       Deletes the given state variable from this agent.
+       """
+       
+       del self.state_values[name]
+   
+   def __setitem__(self, name, value):
+       """
+       Stores a globally-visible state variable.
+       """
+       
+       self.state_values[name] = value
+   
+   def __getitem__(self, name):
+       """
+       Retrieves the value of the given state variable.
+       """
+       
+       return self.state_values[name]
    
    def enter_state(self, state):
       """
@@ -257,7 +280,7 @@ class ZooKeeperAgent(object):
       """
       
       logging.info("Enter state={!r}".format(state.description))
-      self.state_stack.append(state.description)
+      self["state_stack"].append(state.description)
       self.update_state()
    
    def exit_state(self, state):
@@ -266,7 +289,7 @@ class ZooKeeperAgent(object):
       """
       
       logging.info("Exit state={!r}".format(state.description))
-      self.state_stack.pop()
+      self["state_stack"].pop()
       self.update_state()
    
    @forever
@@ -388,6 +411,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                self.logs_handler.owner = owner
                self.logs_handler.task_type = kind
                
+               # Report the current state in ZooKeeper.
+               self["task_id"] = task_id
+               self["sha1"] = sha1
+               self["owner"] = owner
+               self["task_type"] = kind
+               
                try:
                   with Interruptable("Processing AMQP task", self) as working:
                      
@@ -418,6 +447,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                   self.logs_handler.owner = None
                   self.logs_handler.task_type = None
                   self.logs_handler.branch_name = None
+                  
+                  # Clean up ZooKeeper state.
+                  del self["task_id"]
+                  del self["sha1"]
+                  del self["owner"]
+                  del self["task_type"]
                
                # Log completion.
                logging.info('Completed task_id={0!r}'.format(task_id))
