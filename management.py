@@ -319,16 +319,16 @@ class ZooKeeperAgent(object):
        
        # Update memory, CPU, and disk stats.
        self["mem_usage"] = mem_stat.mem_stats()
-       self["cpu_usage"] = cpu_stat.cpu_percents(5)
-       self["disk_throughput"] = disk_stat.disk_reads_writes_persec("xvda1", 5)
+       self["cpu_usage"] = cpu_stat.cpu_percents(1)
+       self["disk_throughput"] = disk_stat.disk_reads_writes_persec("xvda1", 1)
        
        # Update network stats.
        irx, itx = net_stat.rx_tx_bytes("eth0")
-       time.sleep(5)
+       time.sleep(1)
        frx, ftx = net_stat.rx_tx_bytes("eth0")
        
        self["net_throughput"] = dict(
-         transmitted=(frx - irx) / 5.0, recieved=(ftx - itx) / 5.0)
+         transmitted=(frx - irx), received=(ftx - itx))
        
        # Send an update to ZooKeeper.
        self.update_state()
