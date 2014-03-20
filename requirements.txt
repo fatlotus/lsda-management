@@ -9,3 +9,4 @@ numpy
 czipfile
 scipy
 Cython
+matplotlib
