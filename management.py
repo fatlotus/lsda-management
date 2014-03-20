@@ -28,6 +28,9 @@ import pika
 # Allow putting data to S3.
 import boto.s3
 
+# Track subsystem statistics in ZooKeeper.
+from linux_metrics import mem_stat, disk_stat, cpu_stat, net_stat
+
 # Finally, import the stdlib.
 import re, socket, argparse, sys, logging, time, uuid, json, shutil, tempfile
 import base64, os, urllib
@@ -245,6 +248,7 @@ class ZooKeeperAgent(object):
       self["state_stack"] = []
       
       self.thread = gevent.spawn(self._on_currently_running)
+      self.metrics_thread = gevent.spawn(self._collect_system_metrics)
    
    def update_state(self):
       """
@@ -280,6 +284,8 @@ class ZooKeeperAgent(object):
       """
       
       logging.info("Enter state={!r}".format(state.description))
+      
+      # Send an update to ZooKeeper.
       self["state_stack"].append(state.description)
       self.update_state()
    
@@ -289,8 +295,32 @@ class ZooKeeperAgent(object):
       """
       
       logging.info("Exit state={!r}".format(state.description))
+      
+      # Send an update to ZooKeeper.
       self["state_stack"].pop()
       self.update_state()
+   
+   @forever
+   def _collect_system_metrics(self):
+       """
+       Updates ZooKeeper with a 30 second CPU/Mem/IO usage average.
+       """
+       
+       # Update memory, CPU, and disk stats.
+       self["mem_usage"] = mem_stat.mem_stats()
+       self["cpu_usage"] = cpu_stat.cpu_percents(5)
+       self["disk_throughput"] = disk_stat.disk_reads_writes_persec("xvda1", 5)
+       
+       # Update network stats.
+       irx, itx = net_stat.rx_tx_bytes("eth0")
+       time.sleep(5)
+       frx, ftx = net_stat.rx_tx_bytes("eth0")
+       
+       self["net_throughput"] = dict(
+         transmitted=(frx - irx), recieved=(ftx - itx))
+       
+       # Send an update to ZooKeeper.
+       self.update_state()
    
    @forever
    def _on_currently_running(self):
@@ -349,7 +379,11 @@ class ZooKeeperAgent(object):
       
       # Wait until this thread completes or raise the exception it terminated
       # with.
-      self.thread.get()
+      try:
+          self.thread.get()
+      finally:
+          self.metrics_thread.kill()
+          self.metrics_thread.get()
 
 class EngineOrControllerRunner(ZooKeeperAgent):
    """

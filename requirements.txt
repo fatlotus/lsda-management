@@ -10,3 +10,4 @@ czipfile
 scipy
 Cython
 matplotlib
+linux-metrics
