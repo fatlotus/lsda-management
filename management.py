@@ -256,8 +256,17 @@ class ZooKeeperAgent(object):
       """
       
       if self.zookeeper.state == 'CONNECTED':
-          self.zookeeper.set(self.agent_identifier, json.dumps(self.state_values),
-            makepath = True)
+          value = json.dumps(self.state_values)
+          
+          # Create the given nameserver record, if possible.
+          try:
+              self.zookeeper.set(self.agent_identifier, value)
+          except NoNodeError:
+              try:
+                  self.zookeeper.create(self.agent_identifier, value,
+                    makepath=True, ephemeral = True)
+              except NodeExistsError:
+                  pass
    
    def __delitem__(self, name):
        """
