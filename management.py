@@ -317,7 +317,7 @@ class ZooKeeperAgent(object):
        frx, ftx = net_stat.rx_tx_bytes("eth0")
        
        self["net_throughput"] = dict(
-         transmitted=(frx - irx), recieved=(ftx - itx))
+         transmitted=(frx - irx) / 5.0, recieved=(ftx - itx) / 5.0)
        
        # Send an update to ZooKeeper.
        self.update_state()
