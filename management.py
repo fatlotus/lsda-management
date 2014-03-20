@@ -255,7 +255,9 @@ class ZooKeeperAgent(object):
       Tells ZooKeeper of our current state, if we are connected.
       """
       
-      self.zookeeper.set(self.agent_identifier, json.dumps(self.state_values))
+      if self.zookeeper.state == 'CONNECTED':
+          self.zookeeper.set(self.agent_identifier, json.dumps(self.state_values),
+            makepath = True)
    
    def __delitem__(self, name):
        """
@@ -353,12 +355,8 @@ class ZooKeeperAgent(object):
             wait_forever()
                # Block until this occurs.
       
-      # Ensure that we exist in ZooKeeper first.
-      try:
-         self.zookeeper.create(self.agent_identifier,
-           ephemeral = True, makepath = True)
-      except NodeExistsError:
-         pass
+      # Mark ourselves as present in ZooKeeper.
+      self.update_state()
       
       with Interruptable("Connected to ZooKeeper", self) as connected:
          trigger_on_states(connected.interrupt, ( 'SUSPENDED', 'LOST' ))
