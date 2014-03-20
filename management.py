@@ -415,7 +415,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       # Broadcast the current Git revision.
       self["release"] = subprocess.check_output(
         ["/usr/bin/env", "git", "rev-parse", "HEAD"],
-        env = {"GIT_DIR": os.path.dirname(__file__)})
+        env = {"GIT_DIR": os.path.join(os.path.dirname(__file__), ".git")})
    
    @forever
    def _on_connected_to_zookeeper(self):
