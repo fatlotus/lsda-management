@@ -709,7 +709,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          )
          
          # Periodically update S3 with main.ipynb.
-         if command == "controller":
+         if command[0] == "main":
              @gevent.spawn
              def copy_notebook_to_s3():
                 previous_time = 0
