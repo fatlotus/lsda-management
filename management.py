@@ -328,7 +328,7 @@ class ZooKeeperAgent(object):
        frx, ftx = net_stat.rx_tx_bytes("eth0")
        
        self["net_throughput"] = dict(
-         transmitted=(frx - irx), received=(ftx - itx))
+         transmitted=(ftx - itx), received=(frx - irx))
        
        # Send an update to ZooKeeper.
        self.update_state()
@@ -411,6 +411,11 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       self.amqp_channel = amqp_channel
       self.queue_name = queue_name
       self.logs_handler = logs_handler
+      
+      # Broadcast the current Git revision.
+      self["release"] = subprocess.check_output(
+        ["/usr/bin/env", "git", "rev-parse", "HEAD"],
+        env = {"GIT_DIR": os.path.dirname(__file__)})
    
    @forever
    def _on_connected_to_zookeeper(self):
@@ -704,27 +709,31 @@ class EngineOrControllerRunner(ZooKeeperAgent):
          )
          
          # Periodically update S3 with main.ipynb.
-         @gevent.spawn
-         def copy_notebook_to_s3():
-            previous_time = 0
-            path = os.path.join(code_directory, "main.ipynb")
-            
-            while True:
-               
-               # Ensure that we've actually changed since the last time.
-               if os.path.getmtime(path) > previous_time:
-                  
-                  # Upload the ipynb file to S3.
-                  connection = boto.connect_s3()
-                  bucket = connection.get_bucket('ml-submissions')
-                  key = bucket.new_key('results/' + task_id + '.ipynb')
-                  
-                  previous_time = os.path.getmtime(path)
-                  
-                  # Upload the resulting notebook.
-                  key.set_contents_from_filename(path)
-               
-               gevent.sleep(30)
+         if command == "controller":
+             @gevent.spawn
+             def copy_notebook_to_s3():
+                previous_time = 0
+                path = os.path.join(code_directory, "main.ipynb")
+                
+                while True:
+                   
+                   # Ensure that we've actually changed since the last time.
+                   if os.path.getmtime(path) > previous_time:
+                      
+                      # Log the current state.
+                      logging.info("Pushing notebook file to S3...")
+                      
+                      # Upload the ipynb file to S3.
+                      connection = boto.connect_s3()
+                      bucket = connection.get_bucket('ml-submissions')
+                      key = bucket.new_key('results/' + task_id + '.ipynb')
+                      
+                      previous_time = os.path.getmtime(path)
+                      
+                      # Upload the resulting notebook.
+                      key.set_contents_from_filename(path)
+                   
+                   gevent.sleep(30)
          
          # Asynchronously log data from stdout/stderr.
          @gevent.spawn
@@ -763,6 +772,9 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             main_job.kill()
          except OSError:
             pass
+         
+         try:    copy_notebook_to_s3.kill()
+         except: copy_notebook_to_s3.join()
          
          # Finish remaining subtasks.
          try:    drain_quarters.kill()
