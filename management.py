@@ -670,7 +670,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       """
       
       # Create a working directory for this project.
-      code_directory = tempfile.mkdtemp()
+      code_directory = tempfile.mkdtemp(dir = "/mnt")
       os.chmod(code_directory, 0755)
       
       # Collect some per-task statistics.
