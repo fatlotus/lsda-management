@@ -675,6 +675,13 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       Runs the given type of process inside a project sandbox.
       """
       
+      # Ensure that we can write to /mnt (this is a band-aid).
+      with Interruptable("Checking for /mnt", self):
+          if not os.path.ismount("/mnt"):
+              subprocess.check_call(["/bin/mount", "/mnt"])
+          
+          subprocess.check_call(["/bin/chown", "lsda:lsda", "/mnt"])
+      
       # Create a working directory for this project.
       code_directory = tempfile.mkdtemp(dir = "/mnt")
       os.chmod(code_directory, 0755)
