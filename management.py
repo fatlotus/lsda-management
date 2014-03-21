@@ -510,11 +510,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                
                # Mark this task as having finished. This write is where atomic
                # updates should occur.
-               try:
-                   self.zookeeper.create('/done/{0}'.format(task_id), "complete",
-                     makepath = True)
-               except NodeExistsError:
-                   pass
+               if kind == 'controller':
+                   try:
+                       self.zookeeper.create('/done/{0}'.format(task_id),
+                         "complete", makepath = True)
+                   except NodeExistsError:
+                       pass
             
             else:
                logging.warn("Removed task {0!r} that has already been run."
