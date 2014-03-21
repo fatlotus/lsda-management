@@ -320,7 +320,12 @@ class ZooKeeperAgent(object):
        # Update memory, CPU, and disk stats.
        self["mem_usage"] = mem_stat.mem_stats()
        self["cpu_usage"] = cpu_stat.cpu_percents(1)
-       self["disk_throughput"] = disk_stat.disk_reads_writes_persec("xvdb", 1)
+       
+       try:
+           self["disk_throughput"] = (
+             disk_stat.disk_reads_writes_persec("xvdb", 1))
+       except disk_stat.DiskError:
+           self["disk_throughput"] = (None, None)
        
        # Update network stats.
        irx, itx = net_stat.rx_tx_bytes("eth0")
