@@ -736,7 +736,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                if os.path.getmtime(path) > previous_time:
                   
                   # Log the current state.
-                  logging.info("Pushing notebook file to S3...")
+                  logging.info("Pushing notebook file to S3...\n{}".format(
+                      open(path).read()))
                   
                   # Upload the ipynb file to S3.
                   connection = boto.connect_s3()
@@ -748,7 +749,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                   # Upload the resulting notebook.
                   key.set_contents_from_filename(path)
                
-               gevent.sleep(30)
+               gevent.sleep(3)
          
          # Asynchronously log data from stdout/stderr.
          @gevent.spawn
