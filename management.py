@@ -678,9 +678,9 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       # Ensure that we can write to /mnt (this is a band-aid).
       with Interruptable("Checking for /mnt", self):
           if not os.path.ismount("/mnt"):
-              subprocess.check_call(["/bin/mount", "/mnt"])
+              subprocess.check_call(["/usr/bin/sudo", "/bin/mount", "/mnt"])
           
-          subprocess.check_call(["/bin/chown", "lsda:lsda", "/mnt"])
+          subprocess.check_call(["/usr/bin/sudo", "/bin/chown", "lsda", "/mnt"])
       
       # Create a working directory for this project.
       code_directory = tempfile.mkdtemp(dir = "/mnt")
