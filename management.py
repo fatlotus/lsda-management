@@ -833,6 +833,10 @@ def main():
    logging.getLogger().addHandler(handler)
    logging.getLogger().setLevel(logging.INFO)
    
+   # Disable extraneous packet logs from Kazoo.
+   import kazoo.client
+   kazoo.client.log.setLevel(logging.WARN)
+   
    # Ensure that the queue we will pull from exists.
    jobs_channel.queue_declare('lsda_tasks', durable=True)
    
