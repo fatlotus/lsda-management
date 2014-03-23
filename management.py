@@ -602,6 +602,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
       
       controller_job = subprocess.Popen(command, stderr=subprocess.PIPE)
       
+      # Start a local IPython engine.
+      local_engine = gevent.spawn(self._has_engine_task_to_perform,
+        task_id, owner, sha1)
+      
       try:
          # Keep reading until there's output suggesting that we are
          # available for connections.
@@ -669,6 +673,9 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             controller_job.wait()
          except OSError:
             pass
+        
+        # Kill the local instance.
+        local_engine.kill()
    
    def _run_in_sandbox(self, task_id, owner, sha1, command):
       """
