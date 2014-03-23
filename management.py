@@ -248,7 +248,19 @@ class ZooKeeperAgent(object):
       self["state_stack"] = []
       
       self.thread = gevent.spawn(self._on_currently_running)
-      self.metrics_thread = gevent.spawn(self._collect_system_metrics)
+      self.update_thread = gevent.spawn(self._state_updater)
+      
+      self.metrics_threads = []
+      self.metrics = {
+           "mem_usage": (mem_stat.mem_stats,),
+           "cpu_usage": (cpu_stat.cpu_percents, 1),
+           "disk_throughput": (disk_stat.disk_reads_writes_persec, "xvdb", 1),
+           "spindles": (disk_stat.disk_busy, "xvdb", 5),
+           "disk_usage": (disk_stat.disk_usage, "/mnt"),
+           "net_throughput": (self._netstat, "eth0")
+       }
+       
+       self.update_metric_collection()
    
    def update_state(self):
       """
@@ -298,7 +310,6 @@ class ZooKeeperAgent(object):
       
       # Send an update to ZooKeeper.
       self["state_stack"].append(state.description)
-      self.update_state()
    
    def exit_state(self, state):
       """
@@ -309,13 +320,48 @@ class ZooKeeperAgent(object):
       
       # Send an update to ZooKeeper.
       self["state_stack"].pop()
-      self.update_state()
+   
+   @forever
+   def _state_updater(self):
+       """
+       Triggers a 0.5 Hz flush to ZooKeeper to track statistics about this
+       worker."""
+       
+       self.update_state()
+       time.sleep(2)
+   
+   @forever
+   def _metrics_thread(self, name, metric):
+       """
+       Update the server with the current value of the given metric.
+       """
+       
+       function = metric[0]
+       args = metric[1:]
+       
+       self[name] = function(*args)
+       
+       time.sleep(1)
+   
+   def update_metric_collection(self):
+       """
+       Update the background metrics threads given the values in self.metrics.
+       """
+       
+       for thread in self.metrics_threads:
+           thread.kill()
+       
+       for name, metric in self.metrics_threads:
+           self.metrics_threads.append(gevent.spawn(self._metrics_thread,
+             name, metric))
    
    @forever
    def _collect_system_metrics(self):
        """
        Updates ZooKeeper with a 30 second CPU/Mem/IO usage average.
        """
+       
+       jobs = 
        
        # Update memory, CPU, and disk stats.
        self["mem_usage"] = mem_stat.mem_stats()
@@ -326,6 +372,13 @@ class ZooKeeperAgent(object):
              disk_stat.disk_reads_writes_persec("xvdb", 1))
        except disk_stat.DiskError:
            self["disk_throughput"] = (None, None)
+       
+       try:
+           self["spindles"] = disk_stat.disk_busy("xvdb")
+       except disk_stat.DiskError:
+           self["spindles"] = None
+       
+       self["disk_usage"] = disk_stat.disk_usage("/mnt")
        
        # Update network stats.
        irx, itx = net_stat.rx_tx_bytes("eth0")
