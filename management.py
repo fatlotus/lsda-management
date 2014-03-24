@@ -525,7 +525,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             if not self.zookeeper.exists(
                '/done/{0}'.format(task_id),
                partial(gevent.spawn, task_available.interrupt
-                       )):
+            )):
 
                 # Log the start of execution.
                 logging.info(
@@ -583,6 +583,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                     del self["sha1"]
                     del self["owner"]
                     del self["task_type"]
+
+                    self.update_state()
 
                 # Log completion.
                 logging.info('Completed task_id={0!r}'.format(task_id))
@@ -733,19 +735,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 except NoNodeError:
                     pass
 
-                # Inform the user how much time was consumed.
-                total_time = self.zookeeper.Counter(
-                    '/usedtime/{0}'.format(task_id),
-                    default=0.0)
-
-                self.logs_handler.emit_unformatted(
-                    "Total computer time: {0:02d}:{1:02d}:{2:02.4f}.".format(
-                        int(total_time.value / 3600),
-                        int(total_time.value / 60) % 60,
-                        total_time.value % 60
-                    ))
-
-                copy_output_from_controller.get()
+                # Ensure that the output copier is shut down properly.
+                copy_output_from_controller.kill()
 
         finally:
             # Ensure that we don't run a subprocess without ZooKeeper's
