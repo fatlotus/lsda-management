@@ -356,14 +356,14 @@ class ZooKeeperAgent(object):
         self.update_state()
         gevent.sleep(2)
 
-    def _netstat(self):
+    def _netstat(self, interface):
         """
         Calculate the latest network status information.
         """
 
-        irx, itx = net_stat.rx_tx_bytes("eth0")
+        irx, itx = net_stat.rx_tx_bytes(interface)
         gevent.sleep(1)
-        frx, ftx = net_stat.rx_tx_bytes("eth0")
+        frx, ftx = net_stat.rx_tx_bytes(interface)
 
         return dict(transmitted=(ftx - itx), received=(frx - irx))
 
@@ -388,7 +388,7 @@ class ZooKeeperAgent(object):
         for thread in self.metrics_threads:
             thread.kill()
 
-        for name, metric in self.metrics_threads:
+        for name, metric in self.metrics.items():
             self.metrics_threads.append(gevent.spawn(self._metrics_thread,
                                                      name, metric))
 
