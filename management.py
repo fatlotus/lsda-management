@@ -681,10 +681,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
         controller_job = subprocess.Popen(command, stderr=subprocess.PIPE)
 
-        # Start a local IPython engine.
-        local_engine = gevent.spawn(self._has_engine_task_to_perform,
-                                    task_id, owner, sha1)
-
         try:
             # Keep reading until there's output suggesting that we are
             # available for connections.
@@ -693,6 +689,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 if 'scheduler started' in line.lower():
                     controller_info = open(self.__class__.STUPID_JSON).read()
                     break
+
+            # Start a local IPython engine.
+            local_engine = gevent.spawn(self._has_controller,
+                                        task_id, controller_info, owner, sha1)
 
             # Notify ZooKeeper that we've started.
             try:
@@ -839,7 +839,11 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 stderr=subprocess.STDOUT
             )
 
-            copy_notebook_to_s3 = gevent.spawn(self._notebook_copier)
+            copy_notebook_to_s3 = gevent.spawn(
+               self._notebook_copier,
+               code_directory,
+               task_id
+            )
 
             # Asynchronously log data from stdout/stderr.
             @gevent.spawn
