@@ -73,7 +73,7 @@ task_id = sys.argv[2]
 username = sys.argv[3]
 
 # Limit the number of processes in the sandbox.
-resource.setrlimit(resource.RLIMIT_NOFILE, (1024, 1024))
+resource.setrlimit(resource.RLIMIT_NOFILE, (65536, 65536))
 resource.setrlimit(resource.RLIMIT_NPROC, (100, 100))
 
 # Create proper environment variables.
