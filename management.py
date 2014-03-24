@@ -600,7 +600,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 logging.warn("Removed task {0!r} that has already been run."
                              .format(task_id))
 
-    @forever
     def _has_engine_task_to_perform(self, task_id, owner, sha1):
         """
         This function manages the connection to ZooKeeper.
@@ -643,7 +642,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
                 wait_forever()
 
-    @forever
     def _has_controller(self, task_id, controller_info, owner, sha1):
         """
         This function ensures that the engine remains running while the
@@ -663,7 +661,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         # Run the main script in the sandbox.
         self._run_in_sandbox(task_id, owner, sha1, ["ipengine"])
 
-    @forever
     def _has_controller_task_to_perform(
             self, task_id, owner, sha1, finish_job):
         """
@@ -730,6 +727,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 # task and expire the workers.
                 finish_job()
             finally:
+                # Delete the controller job.
                 try:
                     self.zookeeper.delete('/controller/{0}'.format(task_id))
                 except NoNodeError:
