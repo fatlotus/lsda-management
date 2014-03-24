@@ -354,7 +354,7 @@ class ZooKeeperAgent(object):
         worker."""
 
         self.update_state()
-        time.sleep(2)
+        gevent.sleep(2)
 
     def _netstat(self):
         """
@@ -362,7 +362,7 @@ class ZooKeeperAgent(object):
         """
 
         irx, itx = net_stat.rx_tx_bytes("eth0")
-        time.sleep(1)
+        gevent.sleep(1)
         frx, ftx = net_stat.rx_tx_bytes("eth0")
 
         return dict(transmitted=(ftx - itx), received=(frx - irx))
@@ -378,7 +378,7 @@ class ZooKeeperAgent(object):
 
         self[name] = function(*args)
 
-        time.sleep(1)
+        gevent.sleep(1)
 
     def update_metric_collection(self):
         """
