@@ -602,6 +602,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 logging.warn("Removed task {0!r} that has already been run."
                              .format(task_id))
 
+    @forever
     def _has_engine_task_to_perform(self, task_id, owner, sha1):
         """
         This function manages the connection to ZooKeeper.
