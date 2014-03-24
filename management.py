@@ -251,16 +251,16 @@ class ZooKeeperAgent(object):
       self.update_thread = gevent.spawn(self._state_updater)
       
       self.metrics_threads = []
-      self.metrics = {
+      self.metrics = dict(
            "mem_usage": (mem_stat.mem_stats,),
            "cpu_usage": (cpu_stat.cpu_percents, 1),
            "disk_throughput": (disk_stat.disk_reads_writes_persec, "xvdb", 1),
            "spindles": (disk_stat.disk_busy, "xvdb", 5),
            "disk_usage": (disk_stat.disk_usage, "/mnt"),
            "net_throughput": (self._netstat, "eth0")
-       }
-       
-       self.update_metric_collection()
+      }
+      
+      self.update_metric_collection()
    
    def update_state(self):
       """
@@ -354,42 +354,6 @@ class ZooKeeperAgent(object):
        for name, metric in self.metrics_threads:
            self.metrics_threads.append(gevent.spawn(self._metrics_thread,
              name, metric))
-   
-   @forever
-   def _collect_system_metrics(self):
-       """
-       Updates ZooKeeper with a 30 second CPU/Mem/IO usage average.
-       """
-       
-       jobs = 
-       
-       # Update memory, CPU, and disk stats.
-       self["mem_usage"] = mem_stat.mem_stats()
-       self["cpu_usage"] = cpu_stat.cpu_percents(1)
-       
-       try:
-           self["disk_throughput"] = (
-             disk_stat.disk_reads_writes_persec("xvdb", 1))
-       except disk_stat.DiskError:
-           self["disk_throughput"] = (None, None)
-       
-       try:
-           self["spindles"] = disk_stat.disk_busy("xvdb")
-       except disk_stat.DiskError:
-           self["spindles"] = None
-       
-       self["disk_usage"] = disk_stat.disk_usage("/mnt")
-       
-       # Update network stats.
-       irx, itx = net_stat.rx_tx_bytes("eth0")
-       time.sleep(1)
-       frx, ftx = net_stat.rx_tx_bytes("eth0")
-       
-       self["net_throughput"] = dict(
-         transmitted=(ftx - itx), received=(frx - irx))
-       
-       # Send an update to ZooKeeper.
-       self.update_state()
    
    @forever
    def _on_currently_running(self):
