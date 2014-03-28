@@ -64,11 +64,6 @@ u"".encode('idna').decode('idna')
 # Allow the use of the "string-escape" encoding.
 b"".decode('string-escape')
 
-# Allow pylab in the sandbox.
-from IPython.core import pylabtools
-gui, backend = pylabtools.find_gui_and_backend('inline', 'inline')
-pylabtools.activate_matplotlib(backend)
-
 # Decide what user to run this script as.
 user_id = pwd.getpwnam('sandbox').pw_uid
 prefix = os.getcwd()
@@ -186,6 +181,13 @@ import IPython.kernel
 from IPython.kernel.inprocess import InProcessKernelManager
 
 IPython.kernel.KernelManager = InProcessKernelManager
+
+# Allow pylab in the sandbox.
+os.environ['HOME'] = os.path.join(prefix, 'home')
+from IPython.core import pylabtools
+gui, backend = pylabtools.find_gui_and_backend('inline', 'inline')
+pylabtools.activate_matplotlib(backend)
+os.environ['HOME'] = 'home'
 
 # Ensure that we also import the DAL.
 sys.path.append("/worker/dal")
