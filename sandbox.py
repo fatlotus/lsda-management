@@ -64,6 +64,11 @@ u"".encode('idna').decode('idna')
 # Allow the use of the "string-escape" encoding.
 b"".decode('string-escape')
 
+# Allow pylab in the sandbox.
+from IPython.core import pylabtools
+gui, backend = pylabtools.find_gui_and_backend('inline', 'inline')
+pylabtools.activate_matplotlib(backend)
+
 # Decide what user to run this script as.
 user_id = pwd.getpwnam('sandbox').pw_uid
 prefix = os.getcwd()
