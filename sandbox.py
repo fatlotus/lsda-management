@@ -227,7 +227,7 @@ sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 0)
 
 if sys.argv[1] == 'main':
    # Use ipynb to run the default IPython notebook.
-   sys.argv = ['runipy', '-o', 'main.ipynb']
+   sys.argv = ['runipy', '--matplotlib', '-o', 'main.ipynb']
    import runipy.main
    runipy.main.main()
 
