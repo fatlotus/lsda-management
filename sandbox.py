@@ -52,6 +52,7 @@ ALLOWED_MODULES = [
    "heapq",
    "itertools",
    "collections",
+   "matplotlib.pyplot",
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
