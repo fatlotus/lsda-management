@@ -53,6 +53,7 @@ ALLOWED_MODULES = [
    "itertools",
    "collections",
    "matplotlib.pyplot",
+   "matplotlib.backends",
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
