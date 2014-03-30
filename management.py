@@ -554,8 +554,17 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                                     task_id, owner, sha1)
 
                             elif kind == 'controller':
-                                self._has_controller_task_to_perform(
-                                    task_id, owner, sha1, working.interrupt)
+                                result = self._has_controller_task_to_perform(
+                                    task_id, owner, sha1)
+
+                                # Tell ZooKeeper that we have finished.
+                                try:
+                                    self.zookeeper.create(
+                                       '/done/{0}'.format(task_id),
+                                       result, makepath=True)
+
+                                except NodeExistsError:
+                                    pass
 
                             else:
                                 logging.warn(
@@ -588,15 +597,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
                 # Log completion.
                 logging.info('Completed task_id={0!r}'.format(task_id))
-
-                # Mark this task as having finished. This write is where
-                # atomic updates should occur.
-                if kind == 'controller':
-                    try:
-                        self.zookeeper.create('/done/{0}'.format(task_id),
-                                              "complete", makepath=True)
-                    except NodeExistsError:
-                        pass
 
             else:
                 logging.warn("Removed task {0!r} that has already been run."
@@ -664,8 +664,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         # Run the main script in the sandbox.
         self._run_in_sandbox(task_id, owner, sha1, ["ipengine"])
 
-    def _has_controller_task_to_perform(
-            self, task_id, owner, sha1, finish_job):
+    def _has_controller_task_to_perform(self, task_id, owner, sha1):
         """
         This function manages the IPython controller subprocess.
         """
@@ -706,8 +705,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             except NodeExistsError:
                 logging.warn(
                     'Potential race condition in task_id or done/task_id.')
-                finish_job()
-                # Generally this is a sign of a bad task -- but dragons remain.
+                return "temporary failure: dragons"
+
+                  # This is a klugey way to prevent tasks from killing the
+                  # management process.
 
             @gevent.spawn
             def copy_output_from_controller():
@@ -724,11 +725,9 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             try:
                 # Run the main script in the sandbox.
-                self._run_in_sandbox(task_id, owner, sha1, ["main"])
-
-                # Mark this controller as complete, which will deallocate the
-                # task and expire the workers.
-                finish_job()
+                return "exit {}".format(
+                  self._run_in_sandbox(task_id, owner, sha1, ["main"]))
+                
             finally:
                 # Delete the controller job.
                 try:
@@ -811,12 +810,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         )
 
         # Checking out the proper source code.
-        subprocess.call(["/usr/bin/env", "git", "clone", "--quiet",
-                         git_url, code_directory])
+        subprocess.check_call(["/usr/bin/env", "git", "clone", "--quiet",
+                               git_url, code_directory])
 
         # Checking out the proper source code.
-        subprocess.call(["/usr/bin/env", "git", "checkout", sha1],
-                        cwd=code_directory)
+        subprocess.check_call(["/usr/bin/env", "git", "checkout", sha1],
+                              cwd=code_directory)
 
         try:
             # Trigger main IPython job.
@@ -867,8 +866,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             # Actually wait for completion.
             stderr_copier.join()
-            main_job.wait()
-
+            return main_job.wait()
+            
         finally:
             # Clean up main job.
             try:
