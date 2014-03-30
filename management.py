@@ -543,6 +543,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 self["sha1"] = sha1
                 self["owner"] = owner
                 self["task_type"] = kind
+                self["flag"] = ""
 
                 try:
                     with Interruptable("Processing task", self) as working:
@@ -592,6 +593,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                     del self["sha1"]
                     del self["owner"]
                     del self["task_type"]
+                    del self["flag"]
 
                     self.update_state()
 
@@ -789,9 +791,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             # Allow reporting of "flag" values for running jobs.
             if line.startswith("REPORTING_SEMAPHORE "):
-                self.zookeeper.create("/flags/{}".format(task_id),
-                    line.split(" ", 1)[1],
-                    makepath = True)
+                self["flag"] = line.split(" ", 1)[1]
 
             # Quietly exit on EOF.
             elif not line:
@@ -856,7 +856,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                code_directory,
                task_id
             )
-            
+
             stderr_copier = gevent.spawn(self._stderr_copier, main_job, task_id)
 
             @gevent.spawn
