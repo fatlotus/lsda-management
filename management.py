@@ -778,6 +778,29 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             gevent.sleep(3)
 
+    def _stderr_copier(self, main_job, task_id):
+        """
+        Copies data from stdout/stderr to the main logging output, pushing
+        some data values to S3.
+        """
+
+        while True:
+            line = main_job.stdout.readline()
+
+            # Allow reporting of "flag" values for running jobs.
+            if line.startswith("REPORTING_SEMAPHORE "):
+                self.zookeeper.create("/flags/{}".format(task_id),
+                    line.split(" ", 1)[1],
+                    makepath = True)
+
+            # Quietly exit on EOF.
+            elif not line:
+                return
+
+            # Otherwise log to RabbitMQ.
+            else:
+                self.logs_handler.emit_unformatted(line[:-1])
+    
     def _run_in_sandbox(self, task_id, owner, sha1, command):
         """
         Runs the given type of process inside a project sandbox.
@@ -833,19 +856,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                code_directory,
                task_id
             )
-
-            # Asynchronously log data from stdout/stderr.
-            @gevent.spawn
-            def stderr_copier():
-                """
-                Logs data from stdout/stderr to RabbitMQ.
-                """
-
-                while True:
-                    line = main_job.stdout.readline()
-                    if not line:
-                        return
-                    self.logs_handler.emit_unformatted(line[:-1])
+            
+            stderr_copier = gevent.spawn(self._stderr_copier, main_job, task_id)
 
             @gevent.spawn
             def drain_quarters():
