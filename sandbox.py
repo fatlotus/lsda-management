@@ -6,6 +6,7 @@
 # Date: 2 January 2013
 #
 
+import sys
 import os
 import pwd
 import sys
@@ -185,16 +186,8 @@ IPython.kernel.KernelManager = InProcessKernelManager
 
 # Allow pylab in the sandbox.
 os.environ['HOME'] = os.path.join(prefix, 'home')
-from IPython.kernel.inprocess.manager import InProcessKernelManager
-kernel_manager = InProcessKernelManager()
-kernel_manager.start_kernel()
-
-kernel_client = kernel_manager.client()
-kernel_client.start_channels()
-kernel_client.kernel.shell.enable_matplotlib('inline')
-kernel_client.stop_channels()
-
-kernel_manager.shutdown_kernel()
+from runipy import NotebookRunner
+runner = NotebookRunner()
 os.environ['HOME'] = 'home'
 
 # Ensure that we also import the DAL.
@@ -233,9 +226,14 @@ sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 0)
 
 if sys.argv[1] == 'main':
    # Use ipynb to run the default IPython notebook.
-   sys.argv = ['runipy', '--matplotlib', '-o', 'main.ipynb']
-   import runipy.main
+   import runipy.NotebookRunner
    runipy.main.main()
+   
+   # Run the notebook in the specified notebook runner.
+   try:
+       runner.run_notebook('main.ipynb', autosave = 'main.ipynb')
+   except NotebookError:
+       sys.exit(1)
 
 elif sys.argv[1] == 'ipengine':
    # Run "ipengine"
