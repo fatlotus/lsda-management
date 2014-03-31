@@ -185,7 +185,7 @@ IPython.kernel.KernelManager = InProcessKernelManager
 
 # Allow pylab in the sandbox.
 os.environ['HOME'] = os.path.join(prefix, 'home')
-from runipy import NotebookRunner
+from runipy.notebook_runner import NotebookRunner, NotebookError
 runner = NotebookRunner()
 os.environ['HOME'] = 'home'
 
@@ -224,10 +224,6 @@ sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 0)
 
 if sys.argv[1] == 'main':
-   # Use ipynb to run the default IPython notebook.
-   import runipy.NotebookRunner
-   runipy.main.main()
-   
    # Run the notebook in the specified notebook runner.
    try:
        runner.run_notebook('main.ipynb', autosave = 'main.ipynb')
