@@ -185,10 +185,16 @@ IPython.kernel.KernelManager = InProcessKernelManager
 
 # Allow pylab in the sandbox.
 os.environ['HOME'] = os.path.join(prefix, 'home')
-from matplotlib.backends import pylab_setup
-from IPython.core import pylabtools
-gui, backend = pylabtools.find_gui_and_backend('inline', 'inline')
-pylabtools.activate_matplotlib(backend)
+from IPython.kernel.inprocess.manager import InProcessKernelManager
+kernel_manager = InProcessKernelManager()
+kernel_manager.start_kernel()
+
+kernel_client = kernel_manager.client()
+kernel_client.start_channels()
+kernel_client.kernel.shell.enable_matplotlib('inline')
+kernel_client.stop_channels()
+
+kernel_manager.shutdown_kernel()
 os.environ['HOME'] = 'home'
 
 # Ensure that we also import the DAL.
