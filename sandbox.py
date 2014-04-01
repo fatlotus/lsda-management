@@ -177,11 +177,9 @@ if os.path.exists('main.py'):
 # Allow modification of main.ipynb.
 os.chmod('main.ipynb', 0666)
 
-# Knock out the KernelManager.
-import IPython.kernel
-from IPython.kernel.inprocess import InProcessKernelManager
-
-IPython.kernel.KernelManager = InProcessKernelManager
+# Knock out any exit hooks.
+from IPython.core.interactiveshell import InteractiveShell
+InteractiveShell.atexit_operations = (lambda *v, **d: None)
 
 # Allow pylab in the sandbox.
 os.environ['HOME'] = os.path.join(prefix, 'home')
