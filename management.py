@@ -36,7 +36,6 @@ import socket
 import argparse
 import sys
 import logging
-import time
 import uuid
 import json
 import tempfile
@@ -525,7 +524,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             if not self.zookeeper.exists(
                '/done/{0}'.format(task_id),
                partial(gevent.spawn, task_available.interrupt
-            )):
+                       )):
 
                 # Log the start of execution.
                 logging.info(
@@ -548,34 +547,33 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 try:
                     with Interruptable("Processing task", self) as working:
 
-                        try:
-                            # Launch the correct type of worker.
-                            if kind == 'engine':
-                                self._has_engine_task_to_perform(
-                                    task_id, owner, sha1)
+                        # Launch the correct type of worker.
+                        if kind == 'engine':
+                            self._has_engine_task_to_perform(
+                                task_id, owner, sha1)
 
-                            elif kind == 'controller':
-                                result = self._has_controller_task_to_perform(
-                                    task_id, owner, sha1)
+                        elif kind == 'controller':
+                            result = self._has_controller_task_to_perform(
+                                task_id, owner, sha1)
 
-                                # Tell ZooKeeper that we have finished.
-                                try:
-                                    self.zookeeper.create(
-                                       '/done/{0}'.format(task_id),
-                                       result, makepath=True)
+                            # Tell ZooKeeper that we have finished.
+                            try:
+                                self.zookeeper.create(
+                                    '/done/{0}'.format(task_id),
+                                    result, makepath=True)
 
-                                except NodeExistsError:
-                                    pass
+                            except NodeExistsError:
+                                pass
 
-                            else:
-                                logging.warn(
-                                    "Received task of unknown type {0!r}"
-                                    .format(kind)
-                                )
+                        else:
+                            logging.warn(
+                                "Received task of unknown type {0!r}"
+                                .format(kind)
+                            )
 
-                        except Exception:
-                            logging.exception(
-                                'Unhandled exception in daemon')
+                except Exception:
+                    logging.exception(
+                        'Unhandled exception in daemon')
 
                 finally:
                     # Emitting a closing handler.
@@ -728,8 +726,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             try:
                 # Run the main script in the sandbox.
                 return "exit {}".format(
-                  self._run_in_sandbox(task_id, owner, sha1, ["main"]))
-                
+                    self._run_in_sandbox(task_id, owner, sha1, ["main"]))
+
             finally:
                 # Delete the controller job.
                 try:
@@ -800,7 +798,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             # Otherwise log to RabbitMQ.
             else:
                 self.logs_handler.emit_unformatted(line[:-1])
-    
+
     def _run_in_sandbox(self, task_id, owner, sha1, command):
         """
         Runs the given type of process inside a project sandbox.
@@ -852,12 +850,13 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             )
 
             copy_notebook_to_s3 = gevent.spawn(
-               self._notebook_copier,
-               code_directory,
-               task_id
+                self._notebook_copier,
+                code_directory,
+                task_id
             )
 
-            stderr_copier = gevent.spawn(self._stderr_copier, main_job, task_id)
+            stderr_copier = gevent.spawn(
+                self._stderr_copier, main_job, task_id)
 
             @gevent.spawn
             def drain_quarters():
@@ -879,7 +878,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             # Actually wait for completion.
             stderr_copier.join()
             return main_job.wait()
-            
+
         finally:
             # Clean up main job.
             try:

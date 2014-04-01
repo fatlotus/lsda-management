@@ -181,6 +181,14 @@ os.chmod('main.ipynb', 0666)
 from IPython.core.interactiveshell import InteractiveShell
 InteractiveShell.atexit_operations = (lambda *v, **d: None)
 
+# Knock out the 0MQ GC thread.
+from zmq.utils.garbage import GarbageCollectorThread
+GarbageCollectorThread.run = (lambda *v, **d: None)
+
+# Knock out the history cleaning thread.
+from IPython.core.history import HistorySavingThread
+HistorySavingThread.run = (lambda *v, **d: None)
+
 # Allow pylab in the sandbox.
 os.environ['HOME'] = os.path.join(prefix, 'home')
 from runipy.notebook_runner import NotebookRunner, NotebookError
