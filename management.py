@@ -478,10 +478,11 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         self.queue_name = queue_name
         self.logs_handler = logs_handler
 
-        # Broadcast the current Git revision.
+        # Broadcast the current Git revision and AMQP channel.
         self["release"] = subprocess.check_output(
             ["/usr/bin/env", "git", "rev-parse", "HEAD"],
             env={"GIT_DIR": os.path.join(os.path.dirname(__file__), ".git")})
+        self["queue_name"] = queue_name
 
     @forever
     def _on_connected_to_zookeeper(self):
@@ -902,6 +903,7 @@ def main():
     parser = argparse.ArgumentParser(description='Run an LSDA worker node.')
     parser.add_argument('--zookeeper', action='append', required=True)
     parser.add_argument('--amqp', required=True)
+    parser.add_argument('--queue', default='stable')
 
     options = parser.parse_args()
 
@@ -931,11 +933,11 @@ def main():
     kazoo.client.log.setLevel(logging.WARN)
 
     # Ensure that the queue we will pull from exists.
-    jobs_channel.queue_declare('lsda_tasks', durable=True)
+    jobs_channel.queue_declare(options.queue, durable=True)
 
     # Begin processing requests.
     EngineOrControllerRunner(zookeeper, jobs_channel,
-                             'lsda_tasks', handler).join()
+                             options.queue, handler).join()
 
 if __name__ == "__main__":
     sys.exit(main())
