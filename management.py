@@ -664,8 +664,16 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         with open(self.__class__.STUPID_JSON, 'w+') as output_file:
             output_file.write(controller_info)
 
-        # Run the main script in the sandbox.
-        self._run_in_sandbox(task_id, owner, sha1, ["ipengine"])
+        # Run the two engines in separate sandboxes.
+        engines = []
+
+        for i in xrange(2):
+            engines.append(gevent.spawn(self._run_in_sandbox, task_id, owner,
+                                        sha1, ["ipengine"]))
+
+        # Wait for completion.
+        for engine in engines:
+            engine.get()
 
     def _has_controller_task_to_perform(self, task_id, owner, sha1):
         """
