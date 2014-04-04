@@ -187,6 +187,18 @@ IPython.kernel.KernelManager = InProcessKernelManager
 from IPython.core.history import HistorySavingThread
 HistorySavingThread.run = (lambda *v, **d: None)
 
+# Mask exceptions out the 0MQ garbage collecting thread.
+from zmq.error import ZMQError
+from zmq.utils.garbage import GarbageCollectorThread
+
+prev = GarbageCollectorThread.run
+def masked(self, *vargs, **dargs):
+    try:
+        prev(self, *vargs, **dargs)
+    except ZMQError:
+        pass
+GarbageCollectorThread.run = masked
+
 # Knock out the history saving process.
 from IPython.core import history
 history.sqlite3 = None
