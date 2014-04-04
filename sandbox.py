@@ -229,10 +229,7 @@ sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 0)
 
 if sys.argv[1] == 'main':
    # Run the notebook in the specified notebook runner.
-   try:
-       runner.run_notebook('main.ipynb', autosave = 'main.ipynb')
-   except NotebookError:
-       sys.exit(1)
+   runner.run_notebook('main.ipynb', autosave = 'main.ipynb')
 
 elif sys.argv[1] == 'ipengine':
    # Run "ipengine"
