@@ -187,6 +187,10 @@ IPython.kernel.KernelManager = InProcessKernelManager
 from IPython.core.history import HistorySavingThread
 HistorySavingThread.run = (lambda *v, **d: None)
 
+# Knock out the history saving process.
+from IPython.core import history
+history.sqlite3 = None
+
 # Allow pylab in the sandbox.
 os.environ['HOME'] = os.path.join(prefix, 'home')
 from runipy.notebook_runner import NotebookRunner, NotebookError
