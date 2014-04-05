@@ -55,6 +55,7 @@ ALLOWED_MODULES = [
    "collections",
    "matplotlib.pyplot",
    "matplotlib.backends",
+   "scipy.linalg",
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
