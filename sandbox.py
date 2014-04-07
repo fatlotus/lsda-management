@@ -150,7 +150,7 @@ if child != 0:
       # Delete the sandbox.
       subprocess.call(['/bin/rm', '-rf', prefix])
    
-   sys.exit(os.wait())
+   sys.exit(os.wait()[1])
 
 # Rewrite main.ipynb to include main.py.
 if os.path.exists('main.py'):
