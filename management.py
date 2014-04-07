@@ -608,7 +608,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 logging.warn("Removed task {0!r} that has already been run."
                              .format(task_id))
 
-    @forever
     def _has_engine_task_to_perform(self, task_id, owner, from_user, sha1):
         """
         This function manages the connection to ZooKeeper.
@@ -618,39 +617,40 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         # that connection break, the ZooKeeperAgent superclass will inform us by
         # raising a +DisconnectedFromZooKeeper+ exception.
 
-        with Interruptable("Controller is ready", self) as has_controller:
-            try:
-                # Retrieve the current controller from ZooKeeper, and trigger an
-                # interrupt when the current URL changes.
+        while True:
+          with Interruptable("Controller is ready", self) as has_controller:
+              try:
+                  # Retrieve the current controller from ZooKeeper, and trigger an
+                  # interrupt when the current URL changes.
 
-                controller_info = self.zookeeper.get(
-                    '/controller/{}'.format(task_id),
-                    partial(gevent.spawn, has_controller.interrupt)
-                )[0]
+                  controller_info = self.zookeeper.get(
+                      '/controller/{}'.format(task_id),
+                      partial(gevent.spawn, has_controller.interrupt)
+                  )[0]
 
-            except NoNodeError:
-                has_controller.interrupt()
-                # If we couldn't find the controller, skip ahead.
+              except NoNodeError:
+                  has_controller.interrupt()
+                  # If we couldn't find the controller, skip ahead.
 
-            self._has_controller(task_id, controller_info, owner,
-                                 from_user, sha1)
-            # Trigger the next level of processing.
+              self._has_controller(task_id, controller_info, owner,
+                                   from_user, sha1)
+              # Trigger the next level of processing.
 
-        with Interruptable("No controller ready", self) as no_controller:
+          with Interruptable("No controller ready", self) as no_controller:
 
-            def inner(exists):
-                """
-                Interrupt the controller, if it is ready.
-                """
+              def inner(exists):
+                  """
+                  Interrupt the controller, if it is ready.
+                  """
 
-                if exists:
-                    no_controller.interrupt()
+                  if exists:
+                      no_controller.interrupt()
 
-            # Ensure that the given task exists before continuing.
-            if not self.zookeeper.exists('/controller/{0}'.format(task_id),
-                                         partial(gevent.spawn, inner)):
+              # Ensure that the given task exists before continuing.
+              if not self.zookeeper.exists('/controller/{0}'.format(task_id),
+                                           partial(gevent.spawn, inner)):
 
-                wait_forever()
+                  gevent.sleep(60)
 
     def _has_controller(self, task_id, controller_info, owner, from_user, sha1):
         """
