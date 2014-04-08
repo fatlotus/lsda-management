@@ -871,6 +871,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                    code_directory,
                    task_id
                 )
+            else:
+                copy_notebook_to_s3 = None
 
             stderr_copier = gevent.spawn(self._stderr_copier, main_job, task_id)
 
@@ -903,7 +905,9 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 pass
 
             # Clean up helpers.
-            copy_notebook_to_s3.kill()
+            if copy_notebook_to_s3:
+                copy_notebook_to_s3.kill()
+
             drain_quarters.kill()
             stderr_copier.kill()
 
