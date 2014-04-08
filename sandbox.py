@@ -183,6 +183,10 @@ if os.path.exists('main.py'):
 # Allow modification of main.ipynb.
 os.chmod('main.ipynb', 0666)
 
+# Enable verbose logging.
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
 # Knock out the KernelManager.
 import IPython.kernel
 from IPython.kernel.inprocess import InProcessKernelManager
@@ -251,6 +255,7 @@ sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 0)
 
 if sys.argv[1] == 'main':
    # Run the notebook in the specified notebook runner.
+
    runner.run_notebook('main.ipynb', autosave = 'main.ipynb')
 
 elif sys.argv[1] == 'ipengine':
