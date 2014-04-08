@@ -45,6 +45,7 @@ ALLOWED_MODULES = [
    "zmq.utils.garbage",
    "runipy.main",
    "boto",
+   "scipy.stats",
    "boto.s3.connection",
    "DAL",
    "czipfile",

@@ -865,11 +865,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 stderr=subprocess.STDOUT
             )
 
-            copy_notebook_to_s3 = gevent.spawn(
-               self._notebook_copier,
-               code_directory,
-               task_id
-            )
+            if command[0] == "main":
+                copy_notebook_to_s3 = gevent.spawn(
+                   self._notebook_copier,
+                   code_directory,
+                   task_id
+                )
 
             stderr_copier = gevent.spawn(self._stderr_copier, main_job, task_id)
 
