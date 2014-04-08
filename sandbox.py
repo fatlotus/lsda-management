@@ -151,7 +151,7 @@ if child != 0:
       subprocess.call(['/bin/rm', '-rf', prefix])
    
    # Wait for child termination.
-   result = os.wait()
+   result = os.wait()[1]
    
    print("Exit status: {}".format(result))
    sys.exit((result & 0xff) - ((result >> 8) & 0xff))
