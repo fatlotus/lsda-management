@@ -56,7 +56,7 @@ ALLOWED_MODULES = [
    "collections",
    "matplotlib.pyplot",
    "matplotlib.backends",
-   "scipy.linalg",
+   "scipy.linalg"
 ]
 
 # Allow people to use UTF-8 and ASCII codecs in this script.
@@ -67,6 +67,10 @@ u"".encode('idna').decode('idna')
 
 # Allow the use of the "string-escape" encoding.
 b"".decode('string-escape')
+
+# Allow the use of pickling.
+import pickle
+pickle.loads(pickle.dumps(["hello", "world"]))
 
 # Decide what user to run this script as.
 user_id = pwd.getpwnam('sandbox').pw_uid
