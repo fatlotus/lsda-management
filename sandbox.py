@@ -70,7 +70,7 @@ b"".decode('string-escape')
 
 # Allow the use of pickling.
 import pickle
-pickle.loads(pickle.dumps(["hello", "world"]))
+pickle.loads(pickle.dumps([u"hello", u"world"]))
 
 # Decide what user to run this script as.
 user_id = pwd.getpwnam('sandbox').pw_uid
