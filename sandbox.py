@@ -91,6 +91,7 @@ os.environ = {
    'PATH': '/',
    'LANG': 'en_US.UTF-8',
    'TASK_ID': task_id,
+   'SUBMITTER': username,
 }
 os.umask(0)
 
