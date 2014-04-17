@@ -43,6 +43,7 @@ import tempfile
 import os
 import urllib
 from functools import wraps, partial
+from collections import namedtuple
 import os.path
 
 
@@ -146,6 +147,10 @@ def _get_public_ip_address():
 
     return urllib.urlopen("http://169.254.169.254/latest/"
                           "meta-data/public-ipv4").read()
+
+
+Task = namedtuple('Task', ['kind', 'from_user', 'task_id', 'sha1', 'file_name',
+                           'owner'])
 
 
 class AMQPLoggingHandler(logging.Handler):
@@ -502,14 +507,20 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         if method_frame:
             # Parse the incoming message.
             data = json.loads(body)
-            
-            kind = data.get("kind")
-            owner = data.get("owner")
-            from_user = data.get("from_user")
-            task_id = data.get("task_id")
-            sha1 = data.get("sha1")
 
-            self._has_task_available(kind, owner, task_id, from_user, sha1)
+            # Ensure that all fields are defined.
+            for key in data.keys():
+                if key not in Task._fields:
+                    del data[key]
+
+            for key in Task._fields:
+                if key not in data:
+                    data[key] = None
+
+            logging.warn("Data is {!r}".format(data))
+
+            # Process the task.
+            self._has_task_available(Task(**data))
 
             # ACK the AMQP task. Since we're trusting ZooKeeper for once-
             # only delivery, we can afford to let this fall off the stack
@@ -517,7 +528,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             with self.logs_handler.semaphore:
                 self.amqp_channel.basic_ack(method_frame.delivery_tag)
 
-    def _has_task_available(self, kind, owner, task_id, from_user, sha1):
+    def _has_task_available(self, task):
         """
         Processes a task from AMQP.
         """
@@ -526,45 +537,37 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             # Ensure that this task has not already finished.
             if not self.zookeeper.exists(
-               '/done/{0}'.format(task_id),
+               '/done/{0}'.format(task.task_id),
                partial(gevent.spawn, task_available.interrupt
             )):
 
                 # Log the start of execution.
-                logging.info(
-                    'Got task={!r}, kind={!r}, owner={!r}, sha1={!r}'.
-                    format(task_id, kind, owner, sha1))
+                logging.info('Got task={!r}'.format(task))
 
                 # Associate logs with this task.
-                self.logs_handler.task_id = task_id
-                self.logs_handler.sha1 = sha1
-                self.logs_handler.owner = owner
-                self.logs_handler.task_type = kind
+                self.logs_handler.task_id = task.task_id
+                self.logs_handler.sha1 = task.sha1
+                self.logs_handler.owner = task.owner
+                self.logs_handler.task_type = task.kind
 
                 # Report the current state in ZooKeeper.
-                self["task_id"] = task_id
-                self["sha1"] = sha1
-                self["owner"] = owner
-                self["from_user"] = from_user
-                self["task_type"] = kind
+                self["task"] = task
                 self["flag"] = ""
 
                 try:
                     with Interruptable("Processing task", self) as working:
 
                         # Launch the correct type of worker.
-                        if kind == 'engine':
-                            self._has_engine_task_to_perform(
-                                task_id, owner, from_user, sha1)
+                        if task.kind == 'engine':
+                            self._has_engine_task_to_perform(task)
 
-                        elif kind == 'controller':
-                            result = self._has_controller_task_to_perform(
-                                task_id, owner, from_user, sha1)
+                        elif task.kind == 'controller':
+                            result = self._has_controller_task_to_perform(task)
 
                             # Tell ZooKeeper that we have finished.
                             try:
                                 self.zookeeper.create(
-                                   '/done/{0}'.format(task_id),
+                                   '/done/{0}'.format(task.task_id),
                                    result, makepath=True)
 
                             except NodeExistsError:
@@ -573,7 +576,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                         else:
                             logging.warn(
                                 "Received task of unknown type {0!r}"
-                                .format(kind)
+                                .format(task.kind)
                             )
 
                 except Exception:
@@ -582,7 +585,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
                 finally:
                     # Emitting a closing handler.
-                    if kind == 'controller':
+                    if task.kind == 'controller':
                         self.logs_handler.emit_close()
 
                     # Clean up logging.
@@ -592,23 +595,19 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                     self.logs_handler.branch_name = None
 
                     # Clean up ZooKeeper state.
-                    del self["task_id"]
-                    del self["sha1"]
-                    del self["owner"]
-                    del self["task_type"]
-                    del self["from_user"]
+                    del self["task"]
                     del self["flag"]
 
                     self.update_state()
 
                 # Log completion.
-                logging.info('Completed task_id={0!r}'.format(task_id))
+                logging.info('Completed task={0!r}'.format(task))
 
             else:
                 logging.warn("Removed task {0!r} that has already been run."
-                             .format(task_id))
+                             .format(task.task_id))
 
-    def _has_engine_task_to_perform(self, task_id, owner, from_user, sha1):
+    def _has_engine_task_to_perform(self, task):
         """
         This function manages the connection to ZooKeeper.
         """
@@ -624,7 +623,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                   # interrupt when the current URL changes.
 
                   controller_info = self.zookeeper.get(
-                      '/controller/{}'.format(task_id),
+                      '/controller/{}'.format(task.task_id),
                       partial(gevent.spawn, has_controller.interrupt)
                   )[0]
 
@@ -632,8 +631,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                   has_controller.interrupt()
                   # If we couldn't find the controller, skip ahead.
 
-              self._has_controller(task_id, controller_info, owner,
-                                   from_user, sha1)
+              self._has_controller(task, controller_info)
               # Trigger the next level of processing.
 
           with Interruptable("No controller ready", self) as no_controller:
@@ -647,12 +645,13 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                       no_controller.interrupt()
 
               # Ensure that the given task exists before continuing.
-              if not self.zookeeper.exists('/controller/{0}'.format(task_id),
+              if not self.zookeeper.exists('/controller/{0}'.format(
+                                             task.task_id),
                                            partial(gevent.spawn, inner)):
 
                   gevent.sleep(60)
 
-    def _has_controller(self, task_id, controller_info, owner, from_user, sha1):
+    def _has_controller(self, task, controller_info):
         """
         This function ensures that the engine remains running while the
         controller is active.
@@ -672,14 +671,14 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         engines = []
 
         for i in xrange(2):
-            engines.append(gevent.spawn(self._run_in_sandbox, task_id, owner,
-                                        from_user, sha1, ["ipengine"]))
+            engines.append(gevent.spawn(self._run_in_sandbox, task,
+              ["ipengine"]))
 
         # Wait for completion.
         for engine in engines:
             engine.get()
 
-    def _has_controller_task_to_perform(self, task_id, owner, from_user, sha1):
+    def _has_controller_task_to_perform(self, task):
         """
         This function manages the IPython controller subprocess.
         """
@@ -706,13 +705,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             # Start a local IPython engine.
             local_engine = gevent.spawn(self._has_controller,
-                                        task_id, controller_info, owner,
-                                        from_user, sha1)
+                                        task, controller_info)
 
             # Notify ZooKeeper that we've started.
             try:
                 self.zookeeper.create(
-                    '/controller/{0}'.format(task_id),
+                    '/controller/{0}'.format(task.task_id),
                     ephemeral=True,
                     value=controller_info,
                     makepath=True
@@ -741,13 +739,13 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             try:
                 # Run the main script in the sandbox.
-                return "exit {}".format(self._run_in_sandbox(
-                    task_id, owner, from_user, sha1, ["main"]))
+                return "exit {}".format(self._run_in_sandbox(task, ["main"]))
                 
             finally:
                 # Delete the controller job.
                 try:
-                    self.zookeeper.delete('/controller/{0}'.format(task_id))
+                    self.zookeeper.delete('/controller/{0}'.format(
+                      task.task_id))
                 except NoNodeError:
                     pass
 
@@ -772,12 +770,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         """
 
         previous_time = 0
-        path = os.path.join(code_directory, "main.ipynb")
+        path = os.path.join(code_directory, "__saved.ipynb")
 
         while True:
 
             # Ensure that we've actually changed since the last time.
-            if os.path.getmtime(path) > previous_time:
+            if os.path.exists(path) and os.path.getmtime(path) > previous_time:
 
                 # Log the current state.
                 logging.info("Pushing notebook file to S3.")
@@ -815,7 +813,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             else:
                 self.logs_handler.emit_unformatted(line[:-1])
     
-    def _run_in_sandbox(self, task_id, owner, from_user, sha1, command):
+    def _run_in_sandbox(self, task, command):
         """
         Runs the given type of process inside a project sandbox.
         """
@@ -834,31 +832,31 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
         # Collect some per-task statistics.
         quota_used = self.zookeeper.Counter(
-            '/quota_used/compute_time/{0}'.format(owner),
+            '/quota_used/compute_time/{0}'.format(task.owner),
             default=0.0)
         quota_limit = self.zookeeper.Counter(
-            '/quota_limit/compute_time/{0}'.format(owner),
+            '/quota_limit/compute_time/{0}'.format(task.owner),
             default=0.0)
 
         # Construct reference to the current code repository.
         git_url = (
             "http://gitolite-internal.lsda.cs.uchicago.edu:1337/"
             "{}.git"
-        ).format(from_user)
+        ).format(task.from_user)
 
         # Checking out the proper source code.
         subprocess.check_call(["/usr/bin/env", "git", "clone", "--quiet",
                                git_url, code_directory])
 
         # Checking out the proper source code.
-        subprocess.check_call(["/usr/bin/env", "git", "checkout", sha1],
+        subprocess.check_call(["/usr/bin/env", "git", "checkout", task.sha1],
                               cwd=code_directory)
 
         try:
             # Trigger main IPython job.
             main_job = subprocess.Popen(
                 ["/usr/bin/env", "sudo", "/worker/sandbox.py"] + command +
-                [task_id, owner],
+                [task.task_id, task.owner, task.file_name],
 
                 cwd=code_directory,
                 stdout=subprocess.PIPE,
@@ -869,12 +867,13 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 copy_notebook_to_s3 = gevent.spawn(
                    self._notebook_copier,
                    code_directory,
-                   task_id
+                   task.task_id
                 )
             else:
                 copy_notebook_to_s3 = None
 
-            stderr_copier = gevent.spawn(self._stderr_copier, main_job, task_id)
+            stderr_copier = gevent.spawn(self._stderr_copier, main_job,
+                                         task.task_id)
 
             @gevent.spawn
             def drain_quarters():
@@ -900,7 +899,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         finally:
             # Clean up main job.
             try:
-                main_job.kill()
+                if main_job:
+                    main_job.kill()
             except OSError:
                 pass
 
@@ -908,8 +908,11 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             if copy_notebook_to_s3:
                 copy_notebook_to_s3.kill()
 
-            drain_quarters.kill()
-            stderr_copier.kill()
+            if drain_quarters:
+                drain_quarters.kill()
+
+            if stderr_copier:
+                stderr_copier.kill()
 
 
 def main():

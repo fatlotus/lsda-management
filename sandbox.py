@@ -18,6 +18,7 @@ import tempfile
 import json
 import logging
 import atexit
+import traceback
 
 # Bane of my existence... :(
 MAGIC_JSON_FILES = '.ipython/profile_default/security'
@@ -80,6 +81,7 @@ connect_to_ip = None
 # Determine if the user running this script is an administrator.
 task_id = sys.argv[2]
 username = sys.argv[3]
+file_name = sys.argv[4]
 
 # Limit the number of processes in the sandbox.
 resource.setrlimit(resource.RLIMIT_NOFILE, (65536, 65536))
@@ -149,9 +151,9 @@ if child != 0:
          
          # Upload the resulting notebook.
          try:
-            key.set_contents_from_filename('main.ipynb')
-         except OSError:
-            pass
+            key.set_contents_from_filename("__saved.ipynb")
+         except (OSError, IOError):
+            traceback.print_exc()
       
       # Delete the sandbox.
       subprocess.call(['/bin/rm', '-rf', prefix])
@@ -162,32 +164,41 @@ if child != 0:
    print("Exit status: {}".format(result))
    sys.exit((result & 0xff) - ((result >> 8) & 0xff))
 
-# Rewrite main.ipynb to include main.py.
-if os.path.exists('main.py'):
-   
-   # Read existing code in main.py.
-   code_in_main = (['# main.py', ''] +
-     open('main.py', 'r').read().split("\n"))
-   
-   # Open existing notebook.
-   existing_content = json.load(open('main.ipynb', 'r'))
-   cells = existing_content['worksheets'][0]['cells']
-   
-   # Add the new cell to the top of the notebook.
-   cells.insert(0, {
-      'cell_type': 'code',
-      'collapsed': False,
-      'input': code_in_main,
-      'language': 'python',
-      'metadata': {},
-      'outputs': []
-   })
-   
-   # Save the results back to the notebook.
-   json.dump(existing_content, open('main.ipynb', 'w'))
+# Allow modification of the notebook.
+for notebook in ["__main.ipynb", "__saved.ipynb"]:
+    if os.path.exists(notebook):
+        os.remove(notebook)
 
-# Allow modification of main.ipynb.
-os.chmod('main.ipynb', 0666)
+open("__saved.ipynb", "w").close()
+os.chmod("__saved.ipynb", 0o666)
+
+# Create a __main.ipynb file from whatever input we want.
+with open("__main.ipynb", "w") as fp:
+
+    if file_name.endswith(".py"):
+        # Wrap a Python script as a notebook.
+        notebook_data = {
+            "metadata": { "name": "" },
+            "nbformat": 3,
+            "nbformat_minor": 0,
+            "worksheets": [ {
+                "cells": [ {
+                    "cell_type": "code",
+                    "collapsed": false,
+                    "input": open(file_name).readlines(),
+                    "language": "python",
+                    "metadata": {},
+                    "outputs": []
+                } ],
+                "metadata": {}
+            } ]
+        }
+    else:
+        # Read the notebook as given.
+        notebook_data = json.loads(open(file_name).read())
+
+    # Write the data back to the __main file.
+    open("__main.ipynb", "w").write(json.dumps(notebook_data))
 
 # Enable verbose logging.
 import logging
@@ -260,9 +271,8 @@ sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', 0)
 
 if sys.argv[1] == 'main':
-   # Run the notebook in the specified notebook runner.
-
-   runner.run_notebook('main.ipynb', autosave = 'main.ipynb')
+   # Run the notebook or Python source file.
+    runner.run_notebook("__main.ipynb", autosave = "__saved.ipynb")
 
 elif sys.argv[1] == 'ipengine':
    # Run "ipengine"
