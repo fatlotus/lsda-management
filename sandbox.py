@@ -184,7 +184,7 @@ with open("__main.ipynb", "w") as fp:
             "worksheets": [ {
                 "cells": [ {
                     "cell_type": "code",
-                    "collapsed": false,
+                    "collapsed": False,
                     "input": open(file_name).readlines(),
                     "language": "python",
                     "metadata": {},
