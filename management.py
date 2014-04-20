@@ -522,11 +522,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             # Process the task.
             self._has_task_available(Task(**data))
 
-            # ACK the AMQP task. Since we're trusting ZooKeeper for once-
-            # only delivery, we can afford to let this fall off the stack
-            # occasionally.
-            with self.logs_handler.semaphore:
-                self.amqp_channel.basic_ack(method_frame.delivery_tag)
+            # ACK the AMQP task, if it is marked as having completed.
+            if self.zookeeper.exists('/done/{0}'.format(task.task_id)):          
+                with self.logs_handler.semaphore:
+                    self.amqp_channel.basic_ack(method_frame.delivery_tag)
 
     def _has_task_available(self, task):
         """
@@ -649,7 +648,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                                              task.task_id),
                                            partial(gevent.spawn, inner)):
 
-                  gevent.sleep(60)
+                  gevent.sleep(15)
 
     def _has_controller(self, task, controller_info):
         """
