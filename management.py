@@ -550,7 +550,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 self.logs_handler.task_type = task.kind
 
                 # Report the current state in ZooKeeper.
-                self["task"] = task
+                self["task"] = task._asdict()
                 self["flag"] = ""
 
                 try:
