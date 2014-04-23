@@ -156,7 +156,7 @@ def _watchdog_timer(delay_in_seconds = 30 * 60):
     Waits the given amount of time before shutting down this instance.
     """
 
-    gevent.sleep(delay_in_seconds)
+    gevent.sleep(delay_in_seconds + random.uniform(-300, 300))
     _shutdown_instance()
 
 def _shutdown_instance():
