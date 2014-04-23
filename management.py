@@ -28,6 +28,9 @@ import pika
 # Allow putting data to S3.
 import boto.s3
 
+# Allow adjusting the size of the worker pool.
+from boto.ec2.autoscale import AutoScaleConnection
+
 # Track subsystem statistics in ZooKeeper.
 from linux_metrics import mem_stat, disk_stat, cpu_stat, net_stat
 
@@ -115,7 +118,6 @@ class Interruptable(object):
         if self.active:
             self.thread.kill(self.exception)
 
-
 def wait_forever():
     """
     Waits indefinitely.
@@ -147,6 +149,38 @@ def _get_public_ip_address():
 
     return urllib.urlopen("http://169.254.169.254/latest/"
                           "meta-data/public-ipv4").read()
+
+
+def _watchdog_timer(delay_in_seconds = 30 * 60):
+    """
+    Waits the given amount of time before shutting down this instance.
+    """
+
+    gevent.sleep(delay_in_seconds)
+    _shutdown_instance()
+
+def _shutdown_instance():
+    """
+    Shuts down this instance and removes it from the worker pool.
+    """
+
+    # Retrieve the current instance ID.
+    instance_id = urllib.urlopen("http://169.254.169.254/latest/"
+                                 "meta-data/instance-id").read()
+
+    reservation = ec2.get_all_instances([instance_id])[0]
+
+    # Retrieve the current state of the pool.
+    pool = AutoScaleConnection().get_all_groups(["LSDA Worker Pool"])[0]
+
+    if pool.desired_size <= pool.min_size:
+        return
+
+    # Reduce the pool size and shut ourself down.
+    pool.desired_size -= 1
+    pool.update()
+
+    reservation.stop_all()
 
 
 Task = namedtuple('Task', ['kind', 'from_user', 'task_id', 'sha1', 'file_name',
@@ -482,6 +516,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         self.amqp_channel = amqp_channel
         self.queue_name = queue_name
         self.logs_handler = logs_handler
+        self.watchdog = None
 
         # Broadcast the current Git revision and AMQP channel.
         self["release"] = subprocess.check_output(
@@ -508,6 +543,11 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             # Parse the incoming message.
             data = json.loads(body)
 
+            # Keep this node alive for another 30m.
+            if self.watchdog:
+                self.watchdog.kill()
+                self.watchdog = None
+
             # Ensure that all fields are defined.
             for key in data.keys():
                 if key not in Task._fields:
@@ -521,6 +561,9 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             # Process the task.
             self._has_task_available(Task(**data))
+
+            # Ensure that the node eventually shuts down.
+            self.watchdog = gevent.spawn(self._watchdog_timer)
 
             # ACK the AMQP task, if it is marked as having completed.
             if self.zookeeper.exists('/done/{0}'.format(data["task_id"])):          
@@ -695,12 +738,14 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 )
 
             except NodeExistsError:
+                self.zookeeper.set(
+                    '/controller/{0}'.format(task.task_id),
+                    ephemeral=True,
+                    value=controller_info
+                )
+
                 logging.warn(
                     'Potential race condition in task_id or done/task_id.')
-                return "temporary failure: dragons"
-
-                  # This is a klugey way to prevent tasks from killing the
-                  # management process.
 
             @gevent.spawn
             def copy_output_from_controller():
