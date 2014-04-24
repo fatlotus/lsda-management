@@ -14,6 +14,7 @@ Date: 10 December 2013
 from gevent import monkey
 monkey.patch_all()
 from gevent.coros import Semaphore
+from gevent.pywsgi import WSGIServer
 from gevent import subprocess
 import gevent
 
@@ -156,19 +157,20 @@ def _watchdog_timer(delay_in_seconds = 30 * 60):
     Waits the given amount of time before shutting down this instance.
     """
 
-    gevent.sleep(delay_in_seconds + random.uniform(-300, 300))
+    # Wait a random amount of time.
+    seconds = delay_in_seconds + random.uniform(-300, 300)
+    logging.info("About to wait for {}s before shutting down.".format(seconds))
+    gevent.sleep(seconds)
+
+    # Remove this node from the rotation.
+    _remove_from_worker_pool()
     _shutdown_instance()
 
-def _shutdown_instance():
+def _remove_from_worker_pool():
     """
-    Shuts down this instance and removes it from the worker pool.
+    Ensures that this instance is shut down, and unregisted from the worker
+    pool.
     """
-
-    # Retrieve the current instance ID.
-    instance_id = urllib.urlopen("http://169.254.169.254/latest/"
-                                 "meta-data/instance-id").read()
-
-    reservation = ec2.get_all_instances([instance_id])[0]
 
     # Retrieve the current state of the pool.
     pool = AutoScaleConnection().get_all_groups(["LSDA Worker Pool"])[0]
@@ -180,6 +182,16 @@ def _shutdown_instance():
     pool.desired_size -= 1
     pool.update()
 
+def _shutdown_instance():
+    """
+    Shuts down this instance and removes it from the worker pool.
+    """
+
+    # Retrieve the current instance ID.
+    instance_id = urllib.urlopen("http://169.254.169.254/latest/"
+                                 "meta-data/instance-id").read()
+
+    reservation = ec2.get_all_instances([instance_id])[0]
     reservation.stop_all()
 
 
@@ -315,6 +327,9 @@ class ZooKeeperAgent(object):
         self.thread = gevent.spawn(self._on_currently_running)
         self.update_thread = gevent.spawn(self._state_updater)
 
+        self.web_server = WSGIServer(('', 1337), self._state_server)
+        self.web_server_thread = gevent.spawn(self.web_server.serve_forever)
+
         self.metrics_threads = []
         self.metrics = {
             "mem_usage": (mem_stat.mem_stats,),
@@ -385,6 +400,33 @@ class ZooKeeperAgent(object):
 
         # Send an update to ZooKeeper.
         self["state_stack"].pop()
+
+    def _state_server(self, environ, start_response):
+        """
+        A small WSGI server to stream data from this server.
+        """
+
+        # Prepare a HTTP response.
+        start_response("200 Okay", [("Content-type", "text/json")])
+
+        if environ['PATH_INFO'] == '/stream':
+
+            # Continuously stream data out of this server.
+            while True:
+                yield json.dumps(self.state_values)
+                gevent.sleep(2)
+
+        elif environ['PATH_INFO'] == '/state':
+
+            # Allow one-shot metrics collection.
+            yield json.dumps(self.state_values)
+
+        elif (environ['PATH_INFO'] == '/exit' and
+              environ['REQUEST_METHOD'] == 'POST'):
+
+            # Kills this instance.
+            _shutdown_instance()
+            yield json.dumps(dict(status="okay"))
 
     @forever
     def _state_updater(self):
@@ -980,8 +1022,12 @@ def main():
     jobs_channel.queue_declare(options.queue, durable=True)
 
     # Begin processing requests.
-    EngineOrControllerRunner(zookeeper, jobs_channel,
-                             options.queue, handler).join()
+    try:
+        EngineOrControllerRunner(zookeeper, jobs_channel,
+                                 options.queue, handler).join()
+    except Exception:
+        logging.exception("Unhandled exception at root level.")
+        raise
 
 if __name__ == "__main__":
     sys.exit(main())
