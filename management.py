@@ -563,7 +563,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             self._has_task_available(Task(**data))
 
             # Ensure that the node eventually shuts down.
-            self.watchdog = gevent.spawn(self._watchdog_timer)
+            self.watchdog = gevent.spawn(_watchdog_timer)
 
             # ACK the AMQP task, if it is marked as having completed.
             if self.zookeeper.exists('/done/{0}'.format(data["task_id"])):          
