@@ -202,7 +202,7 @@ with open("__main.ipynb", "w") as fp:
 
 # Enable verbose logging.
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 # Knock out the KernelManager.
 import IPython.kernel
