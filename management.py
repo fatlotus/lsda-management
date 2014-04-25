@@ -43,6 +43,7 @@ import logging
 import time
 import uuid
 import json
+import random
 import tempfile
 import os
 import urllib
@@ -846,14 +847,20 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 logging.info("Pushing notebook file to S3.")
 
                 # Upload the ipynb file to S3.
-                connection = boto.connect_s3()
-                bucket = connection.get_bucket('ml-submissions')
-                key = bucket.new_key('results/' + task_id + '.ipynb')
+                try:
+                    connection = boto.connect_s3()
+                    bucket = connection.get_bucket('ml-submissions')
+                    key = bucket.new_key('results/' + task_id + '.ipynb')
 
-                previous_time = os.path.getmtime(path)
+                    # Upload the resulting notebook.
+                    key.set_contents_from_filename(path)
 
-                # Upload the resulting notebook.
-                key.set_contents_from_filename(path)
+                except Exception:
+                    logging.exception("Unable to upload notebook.")
+
+                else:
+                    previous_time = os.path.getmtime(path)
+
 
             gevent.sleep(3)
 
