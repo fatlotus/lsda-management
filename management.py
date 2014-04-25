@@ -47,6 +47,7 @@ import random
 import tempfile
 import os
 import urllib
+import zipfile
 from functools import wraps, partial
 from collections import namedtuple
 import os.path
@@ -910,19 +911,25 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             '/quota_limit/compute_time/{0}'.format(task.owner),
             default=0.0)
 
-        # Construct reference to the current code repository.
-        git_url = (
-            "http://gitolite-internal.lsda.cs.uchicago.edu:1337/"
-            "{}.git"
-        ).format(task.from_user)
+        # Retrieve the zip archive from S3 for this commit.
+        with tempfile.TemporaryFile() as fp:
 
-        # Checking out the proper source code.
-        subprocess.check_call(["/usr/bin/env", "git", "clone", "--quiet",
-                               git_url, code_directory])
+            # Connect to S3.
+            bucket = boto.connect_s3().get_bucket("ml-checkpoints")
 
-        # Checking out the proper source code.
-        subprocess.check_call(["/usr/bin/env", "git", "checkout", task.sha1],
-                              cwd=code_directory)
+            # Download the given git tree.
+            for i in xrange(30):
+                key = bucket.get_key("submissions/{}/{}.zip".format(
+                    task.from_user, task.sha1))
+                if key is not None:
+                    break
+            else:
+                raise ValueError("Unable to find submission ZIP in 30s.")
+
+            key.get_contents_to_file(fp)
+
+            # Extract the Zip archive to our working directory.
+            zipfile.ZipFile(fp).extractall(code_directory)
 
         try:
             # Trigger main IPython job.
