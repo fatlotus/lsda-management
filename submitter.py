@@ -22,6 +22,8 @@ prctl.set_pdeathsig(signal.SIGINT)
 # Ensure that these branches can be fetched over HTTP.
 subprocess.check_call(['git', 'update-server-info'])
 
+sys.exit(0)
+
 # Set up the connection to AMQP.
 connection = pika.BlockingConnection(pika.ConnectionParameters(
   'amqp.lsda.cs.uchicago.edu'))
