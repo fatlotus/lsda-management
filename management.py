@@ -625,7 +625,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
         else:
             with self.logs_handler.semaphore:
-                self.amqp_channel.basic_reject(method_frame.delivery_tag)
+                self.amqp_channel.basic_reject(method_frame.delivery_tag,
+                  requeue=true)
 
     def _has_task_available(self, task):
         """
