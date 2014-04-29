@@ -177,11 +177,11 @@ def _remove_from_worker_pool():
     # Retrieve the current state of the pool.
     pool = AutoScaleConnection().get_all_groups(["LSDA Worker Pool"])[0]
 
-    if pool.desired_size <= pool.min_size:
+    if pool.desired_capacity <= pool.min_size:
         return
 
     # Reduce the pool size and shut ourself down.
-    pool.desired_size -= 1
+    pool.desired_capacity -= 1
     pool.update()
 
 def _shutdown_instance():
@@ -806,7 +806,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             try:
                 # Run the main script in the sandbox.
-                return "exit {}".format(self._run_in_sandbox(task, ["main"]))
+                return self._run_in_sandbox(task, ["main"])
                 
             finally:
                 # Delete the controller job.
@@ -973,7 +973,9 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             # Actually wait for completion.
             stderr_copier.join()
-            return main_job.wait()
+            status = main_job.wait()
+
+            return "exit {}".format(status)
             
         finally:
             # Clean up main job.
