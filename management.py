@@ -620,6 +620,10 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             with self.logs_handler.semaphore:
                 self.amqp_channel.basic_ack(method_frame.delivery_tag)
 
+        else:
+            with self.logs_handler.semaphore:
+                self.amqp_channel.basic_reject(method_frame.delivery_tag)
+
     def _has_task_available(self, task):
         """
         Processes a task from AMQP.
