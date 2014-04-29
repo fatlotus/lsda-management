@@ -28,6 +28,7 @@ import pika
 
 # Allow putting data to S3.
 import boto.s3
+import boto.ec2
 
 # Allow adjusting the size of the worker pool.
 from boto.ec2.autoscale import AutoScaleConnection
@@ -193,7 +194,9 @@ def _shutdown_instance():
     instance_id = urllib.urlopen("http://169.254.169.254/latest/"
                                  "meta-data/instance-id").read()
 
-    reservation = ec2.get_all_instances([instance_id])[0]
+    conn = boto.ec2.connect_to_region("us-east-1")
+
+    reservation = conn.get_all_instances([instance_id])[0]
     reservation.stop_all()
 
 
@@ -574,45 +577,48 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         This function manages the daemon to pull tasks from AMQP.
         """
 
-        # Ensure that we don't busy wait.
-        gevent.sleep(1)
+        # Ensure that the node eventually shuts down.
+        self.watchdog = gevent.spawn(_watchdog_timer)
 
-        # Consume the next event.
-        with self.logs_handler.semaphore:
-            method_frame, _, body = (
-                self.amqp_channel.basic_get(self.queue_name))
+        while True:
+            # Rate-limit polling from AMQP.
+            gevent.sleep(1)
 
-        # Mask an empty queue.
-        if method_frame:
-            # Parse the incoming message.
-            data = json.loads(body)
+            # Consume the next event.
+            with self.logs_handler.semaphore:
+                method_frame, _, body = (
+                    self.amqp_channel.basic_get(self.queue_name))
 
-            # Keep this node alive for another 30m.
-            if self.watchdog:
-                self.watchdog.kill()
-                self.watchdog = None
+            # Break out of this loop if not an event.
+            if method_frame:
+                break
 
-            # Ensure that all fields are defined.
-            for key in data.keys():
-                if key not in Task._fields:
-                    del data[key]
+        # Parse the incoming message.
+        data = json.loads(body)
 
-            for key in Task._fields:
-                if key not in data:
-                    data[key] = None
+        # Keep this node alive for another 30m.
+        if self.watchdog:
+            self.watchdog.kill()
+            self.watchdog = None
 
-            logging.warn("Data is {!r}".format(data))
+        # Ensure that all fields are defined.
+        for key in data.keys():
+            if key not in Task._fields:
+                del data[key]
 
-            # Process the task.
-            self._has_task_available(Task(**data))
+        for key in Task._fields:
+            if key not in data:
+                data[key] = None
 
-            # Ensure that the node eventually shuts down.
-            self.watchdog = gevent.spawn(_watchdog_timer)
+        logging.warn("Data is {!r}".format(data))
 
-            # ACK the AMQP task, if it is marked as having completed.
-            if self.zookeeper.exists('/done/{0}'.format(data["task_id"])):          
-                with self.logs_handler.semaphore:
-                    self.amqp_channel.basic_ack(method_frame.delivery_tag)
+        # Process the task.
+        self._has_task_available(Task(**data))
+
+        # ACK the AMQP task, if it is marked as having completed.
+        if self.zookeeper.exists('/done/{0}'.format(data["task_id"])):
+            with self.logs_handler.semaphore:
+                self.amqp_channel.basic_ack(method_frame.delivery_tag)
 
     def _has_task_available(self, task):
         """
