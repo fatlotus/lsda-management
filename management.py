@@ -462,7 +462,10 @@ class ZooKeeperAgent(object):
         function = metric[0]
         args = metric[1:]
 
-        self[name] = function(*args)
+        try:
+            self[name] = function(*args)
+        except Exception:
+            logging.exception("Unable to read metric {}.".format(name))
 
         gevent.sleep(1)
 
