@@ -164,10 +164,10 @@ def _is_up_to_date():
     conn = AutoScaleConnection()
     pool = conn.get_all_groups(["LSDA Worker Pool"])[0]
     config = conn.get_all_launch_configurations(
-      names=[pool.launch_configuration_name])[0]
+      names=[pool.launch_config_name])[0]
 
     # Retrive the AMI for this instance and for others.
-    config_ami = config.ami_id
+    config_ami = config.image_id
     my_ami = urllib.urlopen("http://169.254.169.254/latest/"
                             "meta-data/ami-id").read()
 
@@ -613,7 +613,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             # Ensure that we remain up-to-date.
             if time % 10 == 0:
-                if not _is_up_to_date():
+                if self.queue_name == "stable" and not _is_up_to_date():
                     _shutdown_instance()
             time += 1
 
