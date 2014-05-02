@@ -171,7 +171,7 @@ def _is_up_to_date():
     my_ami = urllib.urlopen("http://169.254.169.254/latest/"
                             "meta-data/ami-id").read()
 
-    return config_ami == my_ami:
+    return config_ami == my_ami
 
 def _watchdog_timer(delay_in_seconds = 30 * 60):
     """
