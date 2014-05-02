@@ -155,6 +155,24 @@ def _get_public_ip_address():
                           "meta-data/public-ipv4").read()
 
 
+def _is_up_to_date():
+    """
+    Returns True if this instance is up to date.
+    """
+
+    # Retrieve instance information.
+    conn = AutoScaleConnection()
+    pool = conn.get_all_groups(["LSDA Worker Pool"])[0]
+    config = conn.get_all_launch_configurations(
+      names=[pool.launch_configuration_name])[0]
+
+    # Retrive the AMI for this instance and for others.
+    config_ami = config.ami_id
+    my_ami = urllib.urlopen("http://169.254.169.254/latest/"
+                            "meta-data/ami-id").read()
+
+    return config_ami == my_ami:
+
 def _watchdog_timer(delay_in_seconds = 30 * 60):
     """
     Waits the given amount of time before shutting down this instance.
@@ -198,6 +216,10 @@ def _shutdown_instance():
 
     reservation = conn.get_all_instances([instance_id])[0]
     reservation.stop_all()
+
+    # Wait for shutdown.
+    while True:
+        gevent.sleep(3600)
 
 
 Task = namedtuple('Task', ['kind', 'from_user', 'task_id', 'sha1', 'file_name',
@@ -583,9 +605,17 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         # Ensure that the node eventually shuts down.
         self.watchdog = gevent.spawn(_watchdog_timer)
 
+        time = 0
+
         while True:
             # Rate-limit polling from AMQP.
             gevent.sleep(1)
+
+            # Ensure that we remain up-to-date.
+            if time % 10 == 0:
+                if not _is_up_to_date():
+                    _shutdown_instance()
+            time += 1
 
             # Consume the next event.
             with self.logs_handler.semaphore:
