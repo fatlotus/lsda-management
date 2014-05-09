@@ -208,14 +208,8 @@ def _shutdown_instance():
     Shuts down this instance and removes it from the worker pool.
     """
 
-    # Retrieve the current instance ID.
-    instance_id = urllib.urlopen("http://169.254.169.254/latest/"
-                                 "meta-data/instance-id").read()
-
-    conn = boto.ec2.connect_to_region("us-east-1")
-
-    reservation = conn.get_all_instances([instance_id])[0]
-    reservation.stop_all()
+    # Trigger immediate shutdown.
+    subprocess.check_call(["/usr/bin/sudo", "/sbin/shutdown", "-h", "now"])
 
     # Wait for shutdown.
     while True:
@@ -613,7 +607,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             # Ensure that we remain up-to-date.
             if time % 10 == 0:
-                if self.queue_name == "stable" and not _is_up_to_date():
+                if not _is_up_to_date():
                     _shutdown_instance()
             time += 1
 
