@@ -869,7 +869,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             # Kill the local instance.
             local_engine.kill()
 
-    def _notebook_copier(self, code_directory, task_id):
+    def _notebook_copier(self, code_directory, task):
         """
         Copies main.ipynb to the S3 bucket for the given +task_id+.
         """
@@ -889,10 +889,36 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 try:
                     connection = boto.connect_s3()
                     bucket = connection.get_bucket('ml-submissions')
-                    key = bucket.new_key('results/' + task_id + '.ipynb')
+                    key = bucket.new_key('results/{}.ipynb'.
+                      format(task.task_id))
 
                     # Upload the resulting notebook.
                     key.set_contents_from_filename(path)
+
+                    # Generate a rendered version of this notebook.
+                    with tempfile.TemporaryFile() as fp:
+
+                        # Convert notebook to an HTML file.
+                        subprocess.check_call(["/usr/bin/env",
+                          "ipython", "nbconvert",
+                          "--to=html", "--stdout", path], stdout = fp)
+
+                        # Construct a rendered URL.
+                        render_url = urllib.urlencode(task.__dict__)
+
+                        fp.write((
+                          '<script type="script/javascript" src="https://lsda.c'
+                          's.uchicago.edu/render.js?{}"></script>'
+                        ).format(render_url))
+                        
+                        fp.seek(0)
+
+                        # Upload the HTML version of the notebook.
+                        key = bucket.new_key('results/{}.html'.
+                          format(task.task_id))
+                        key.content_type = "text/html"
+                        key.set_contents_from_file(fp)
+                        key.update()
 
                 except Exception:
                     logging.exception("Unable to upload notebook.")
@@ -984,7 +1010,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                 copy_notebook_to_s3 = gevent.spawn(
                    self._notebook_copier,
                    code_directory,
-                   task.task_id
+                   task
                 )
             else:
                 copy_notebook_to_s3 = None
