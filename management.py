@@ -919,7 +919,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                           format(task.task_id))
                         key.content_type = "text/html"
                         key.set_contents_from_file(fp)
-                        key.update()
 
                 except Exception:
                     logging.exception("Unable to upload notebook.")
