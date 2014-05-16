@@ -891,6 +891,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                     bucket = connection.get_bucket('ml-submissions')
                     key = bucket.new_key('results/{}.ipynb'.
                       format(task.task_id))
+                    key.content_type = "text/json"
 
                     # Upload the resulting notebook.
                     key.set_contents_from_filename(path)
@@ -962,6 +963,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             subprocess.check_call(
                 ["/usr/bin/sudo", "/bin/chown", "lsda", "/mnt"])
+            subprocess.check_call(
+                ["/usr/bin/sudo", "/bin/chmod", "0777", "/mnt"])
 
         # Create a working directory for this project.
         code_directory = tempfile.mkdtemp(dir="/mnt")
