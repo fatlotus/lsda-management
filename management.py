@@ -583,6 +583,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         self.queue_name = queue_name
         self.logs_handler = logs_handler
         self.watchdog = None
+        self.dequeue_this_task = False
 
         # Broadcast the current Git revision and AMQP channel.
         self["release"] = subprocess.check_output(
@@ -639,16 +640,20 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
         logging.warn("Data is {!r}".format(data))
 
+        # Allow in-task cancellation.
+        self.dequeue_this_task = False
+
         # Process the task.
         self._has_task_available(Task(**data))
 
         # ACK the AMQP task, if it is marked as having completed.
-        if self.zookeeper.exists('/done/{0}'.format(data["task_id"])):
-            with self.logs_handler.semaphore:
+        with self.logs_handler.semaphore:
+            if (self.zookeeper.exists('/done/{0}'.format(data["task_id"])) or
+                self.dequeue_this_task):
+
                 self.amqp_channel.basic_ack(method_frame.delivery_tag)
 
-        else:
-            with self.logs_handler.semaphore:
+            else:
                 self.amqp_channel.basic_reject(method_frame.delivery_tag,
                   requeue=True)
 
@@ -929,7 +934,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
 
             gevent.sleep(3)
 
-    def _stderr_copier(self, main_job, task_id):
+    def _stderr_copier(self, main_job, task):
         """
         Copies data from stdout/stderr to the main logging output, pushing
         some data values to S3.
@@ -941,6 +946,22 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             # Allow reporting of "flag" values for running jobs.
             if line.startswith("REPORTING_SEMAPHORE "):
                 self["flag"] = line.split(" ", 1)[1]
+
+            # Allow the task to cancel itself.
+            elif line.startswith("DEQUEUE_THIS_TASK"):
+                self.dequeue_this_task = True
+                main_job.kill()
+
+            # Allow the task to create more copies of itself.
+            elif line.startswith("SPAWN_NEW_COPY"):
+
+                # Add new task into AMQP.
+                with self.logs_handler.semaphore:
+                    self.amqp_channel.basic_publish(
+                       exchange = '',
+                       routing_key = self.queue_name,
+                       body = json.dumps(self.task.replace(kind='engine'))
+                    )
 
             # Quietly exit on EOF.
             elif not line:
@@ -1017,8 +1038,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             else:
                 copy_notebook_to_s3 = None
 
-            stderr_copier = gevent.spawn(self._stderr_copier, main_job,
-                                         task.task_id)
+            stderr_copier = gevent.spawn(self._stderr_copier, main_job, task)
 
             @gevent.spawn
             def drain_quarters():
