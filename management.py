@@ -827,7 +827,6 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             except NodeExistsError:
                 self.zookeeper.set(
                     '/controller/{0}'.format(task.task_id),
-                    ephemeral=True,
                     value=controller_info
                 )
 
@@ -941,7 +940,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         """
 
         while True:
-            line = main_job.stdout.readline()
+            line = main_job.stdout.readline(65536)
 
             # Allow reporting of "flag" values for running jobs.
             if line.startswith("REPORTING_SEMAPHORE "):
