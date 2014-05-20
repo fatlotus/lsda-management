@@ -344,6 +344,8 @@ class ZooKeeperAgent(object):
         self.agent_identifier = "/nodes/{}".format(_get_public_ip_address())
 
         self["state_stack"] = []
+        
+        self.warnings = dict()
 
         self.thread = gevent.spawn(self._on_currently_running)
         self.update_thread = gevent.spawn(self._state_updater)
@@ -358,7 +360,8 @@ class ZooKeeperAgent(object):
             "disk_throughput": (disk_stat.disk_reads_writes_persec, "xvdb", 1),
             "spindles": (disk_stat.disk_busy, "xvdb", 5),
             "disk_usage": (disk_stat.disk_usage, "/mnt"),
-            "net_throughput": (self._netstat, "eth0")
+            "net_throughput": (self._netstat, "eth0"),
+            "warnings" (self._compute_warnings,)
         }
 
         self.update_metric_collection()
@@ -401,6 +404,44 @@ class ZooKeeperAgent(object):
         """
 
         return self.state_values[name]
+
+    def _compute_warnings(self):
+        """
+        Marks the current set of warnings in ZooKeeper.
+        """
+
+        # Provide notification of this error.
+        right_now = time.time()
+        all_warnings = []
+        
+        # Check for high memory usage.
+        if "mem_usage" in self.state_values:
+            mactive, mtotal, mcached, mfree, stotal, sfree = self["mem_usage"]
+            usage_percent = 1 - (mfree + mcached) / float(mtotal)
+            
+            if usage_percent > 0.90:
+                self.apply_warning("OutOfRAM")
+
+        # Check for high disk usage.
+        if "disk_usage" in self.state_values:
+            disk_usage = float(self["disk_usage"][4][:-1]) / 100
+
+            if disk_usage > 0.90:
+                self.apply_warning("OutOfSSD")
+
+        # Find those warnings that have occured in the last five minutes.
+        for warning, last_notified in self.warnings.items():
+            if (right_now - last_notified) < 5:
+                all_warnings.append(warning)
+
+        return all_warnings
+
+    def apply_warning(self, warning_name):
+        """
+        Makes a note of something that could cause a task to fail.
+        """
+
+        self.warnings[warning_name] = time.time()
 
     def enter_state(self, state):
         """
@@ -1059,6 +1100,9 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             # Actually wait for completion.
             stderr_copier.join()
             status = main_job.wait()
+
+            # Attempt to diagnose the failure reason.
+            if 
 
             return "exit {}".format(status)
             
