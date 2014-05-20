@@ -413,12 +413,12 @@ class ZooKeeperAgent(object):
         # Provide notification of this error.
         right_now = time.time()
         all_warnings = []
-        
+
         # Check for high memory usage.
         if "mem_usage" in self.state_values:
             mactive, mtotal, mcached, mfree, stotal, sfree = self["mem_usage"]
             usage_percent = 1 - (mfree + mcached) / float(mtotal)
-            
+
             if usage_percent > 0.90:
                 self.apply_warning("OutOfRAM")
 
@@ -1092,6 +1092,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                     gevent.sleep(60)
 
                 # Kill the job when we're out.
+                self.apply_warning("OutOfQuota")
+
                 logging.error('Job killed -- out of time: used {} of {}'.format(
                     quota_used.value, quota_limit.value))
                 main_job.kill()
@@ -1101,11 +1103,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             stderr_copier.join()
             status = main_job.wait()
 
-            # Attempt to diagnose the failure reason.
-            if 
+            return "exit {} {}".format(status, self.warnings.join(" "))
 
-            return "exit {}".format(status)
-            
         finally:
             # Clean up main job.
             try:
