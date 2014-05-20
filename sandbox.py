@@ -278,7 +278,8 @@ if sys.argv[1] == 'main':
 elif sys.argv[1] == 'ipengine':
    # Run "ipengine"
    
-   sys.argv = ['ipengine', '--log-level', 'ERROR']
+   sys.argv = ['ipengine', '--log-level', 'DEBUG',
+               '--EngineFactory.max_heartbeat_misses=100000000']
    
    import IPython.parallel.apps.ipengineapp
    IPython.parallel.apps.ipengineapp.launch_new_instance()
