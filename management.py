@@ -824,8 +824,12 @@ class EngineOrControllerRunner(ZooKeeperAgent):
               ["ipengine"]))
 
         # Wait for completion.
-        for engine in engines:
-            engine.get()
+        try:
+            for engine in engines:
+                engine.get()
+        finally:
+            for engine in engines:
+                engine.kill()
 
     def _has_controller_task_to_perform(self, task):
         """
@@ -1103,7 +1107,8 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             stderr_copier.join()
             status = main_job.wait()
 
-            return "exit {} {}".format(status, self.warnings.join(" "))
+            return "exit {} {}".format(status,
+              self._compute_warnings().join(" "))
 
         finally:
             # Clean up main job.
