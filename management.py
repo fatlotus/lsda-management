@@ -1004,7 +1004,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
                     self.amqp_channel.basic_publish(
                        exchange = '',
                        routing_key = self.queue_name,
-                       body = json.dumps(self.task.replace(kind='engine'))
+                       body = json.dumps(task.replace(kind='engine'))
                     )
 
             # Quietly exit on EOF.
