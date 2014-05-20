@@ -361,7 +361,7 @@ class ZooKeeperAgent(object):
             "spindles": (disk_stat.disk_busy, "xvdb", 5),
             "disk_usage": (disk_stat.disk_usage, "/mnt"),
             "net_throughput": (self._netstat, "eth0"),
-            "warnings" (self._compute_warnings,)
+            "warnings": (self._compute_warnings,),
         }
 
         self.update_metric_collection()
