@@ -1108,7 +1108,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             status = main_job.wait()
 
             return "exit {} {}".format(status,
-              self._compute_warnings().join(" "))
+              " ".join(self._compute_warnings()))
 
         finally:
             # Clean up main job.
