@@ -648,7 +648,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
             gevent.sleep(1)
 
             # Ensure that we remain up-to-date.
-            if time % 10 == 0:
+            if time % 60 == 0:
                 if not _is_up_to_date():
                     _shutdown_instance()
             time += 1
@@ -1169,6 +1169,9 @@ def main():
 
     # Ensure that the queue we will pull from exists.
     jobs_channel.queue_declare(options.queue, durable=True)
+
+    # Prevent flapping tasks from whacking resource.
+    gevent.sleep(10)
 
     # Begin processing requests.
     try:
