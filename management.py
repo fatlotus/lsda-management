@@ -625,6 +625,7 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         self.logs_handler = logs_handler
         self.watchdog = None
         self.dequeue_this_task = False
+        self.time = 0
 
         # Broadcast the current Git revision and AMQP channel.
         self["release"] = subprocess.check_output(
@@ -641,17 +642,15 @@ class EngineOrControllerRunner(ZooKeeperAgent):
         # Ensure that the node eventually shuts down.
         self.watchdog = gevent.spawn(_watchdog_timer)
 
-        time = 0
-
         while True:
             # Rate-limit polling from AMQP.
             gevent.sleep(1)
 
             # Ensure that we remain up-to-date.
-            if time % 60 == 0:
+            if self.time % 600 == 0:
                 if not _is_up_to_date():
                     _shutdown_instance()
-            time += 1
+            self.time += 1
 
             # Consume the next event.
             with self.logs_handler.semaphore:
